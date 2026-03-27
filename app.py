@@ -209,8 +209,6 @@ def tree():
 
     entries = []
     for item in target_dir.iterdir():
-        if item.name.startswith("."):
-            continue
         rel = str(item.relative_to(repo_path))
         entries.append({
             "name": item.name,
