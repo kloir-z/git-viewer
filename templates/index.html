@@ -45,22 +45,56 @@ let currentTab = 'overview';
 let logData = [];
 let diffFormat = 'line-by-line';
 
+// --- State persistence ---
+const STATE_KEY = 'gitviewer_state';
+function saveState() {
+  localStorage.setItem(STATE_KEY, JSON.stringify({
+    repo: currentRepo,
+    tab: currentTab,
+    path: currentPath,
+  }));
+}
+function loadState() {
+  try { return JSON.parse(localStorage.getItem(STATE_KEY)) || {}; } catch { return {}; }
+}
+
 // --- Init ---
 async function init() {
   repos = await fetchJson('/api/repos');
   repoSelect.innerHTML = repos.map(r =>
     `<option value="${r.name}">${r.name}</option>`
   ).join('');
-  if (repos.length > 0) {
+
+  const saved = loadState();
+  const repoNames = repos.map(r => r.name);
+  if (saved.repo && repoNames.includes(saved.repo)) {
+    currentRepo = saved.repo;
+  } else if (repos.length > 0) {
     currentRepo = repos[0].name;
-    repoSelect.value = currentRepo;
   }
-  repoSelect.onchange = () => { currentRepo = repoSelect.value; renderTab(); };
+  repoSelect.value = currentRepo;
+
+  if (saved.tab && ['overview','log','diff','files'].includes(saved.tab)) {
+    currentTab = saved.tab;
+    $$('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === currentTab));
+  }
+  if (saved.path) currentPath = saved.path;
+
+  repoSelect.onchange = () => { currentRepo = repoSelect.value; currentPath = ''; saveState(); renderTab(); };
   renderTab();
 }
 
 async function refresh() {
   repos = await fetchJson('/api/repos');
+  repoSelect.innerHTML = repos.map(r =>
+    `<option value="${r.name}">${r.name}</option>`
+  ).join('');
+  const repoNames = repos.map(r => r.name);
+  if (!repoNames.includes(currentRepo) && repos.length > 0) {
+    currentRepo = repos[0].name;
+  }
+  repoSelect.value = currentRepo;
+  saveState();
   renderTab();
 }
 
@@ -75,7 +109,9 @@ async function fetchJson(url) {
 // --- Tabs ---
 function switchTab(tab) {
   currentTab = tab;
+  if (tab !== 'files') currentPath = '';
   $$('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+  saveState();
   renderTab();
 }
 
@@ -227,6 +263,7 @@ let currentPath = '';
 
 async function renderFiles(path) {
   if (path !== undefined) currentPath = path;
+  saveState();
   const entries = await fetchJson(`/api/tree?repo=${currentRepo}&path=${encodeURIComponent(currentPath)}`);
 
   const breadcrumb = buildBreadcrumb(currentPath);
