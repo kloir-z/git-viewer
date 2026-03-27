@@ -1,8 +1,10 @@
+import mimetypes
 import re
 import subprocess
+from io import BytesIO
 from pathlib import Path
 
-from flask import Flask, abort, jsonify, render_template, request
+from flask import Flask, Response, abort, jsonify, render_template, request, send_file
 
 app = Flask(__name__)
 
@@ -137,20 +139,127 @@ def diff():
     commit = request.args.get("commit", "")
     repo_path = valid_repo(name)
 
+    file_path = request.args.get("file", "")
+    if file_path and ("/" == file_path[0] or ".." in file_path):
+        abort(400)
+
     if commit:
         if not commit.replace("-", "").isalnum() or len(commit) > 40:
             abort(400)
-        diff_text = git(repo_path, "diff", f"{commit}^..{commit}")
-        files_raw = git(repo_path, "diff", "--name-only", f"{commit}^..{commit}")
+        parent = git(repo_path, "rev-parse", "--verify", f"{commit}^", default="")
+        if parent:
+            cmd = ["diff", f"{commit}^..{commit}"]
+            if file_path:
+                cmd += ["--", file_path]
+            diff_text = git(repo_path, *cmd)
+            files_raw = git(repo_path, "diff", "--name-only", f"{commit}^..{commit}")
+        else:
+            cmd = ["diff-tree", "-p", "--root", commit]
+            if file_path:
+                cmd += ["--", file_path]
+            raw = git(repo_path, *cmd)
+            diff_text = raw.split("\n", 1)[1] if "\n" in raw else raw
+            files_raw = git(repo_path, "diff-tree", "--no-commit-id", "--name-only", "-r", "--root", commit)
     else:
-        unstaged = git(repo_path, "diff")
-        staged = git(repo_path, "diff", "--cached")
+        file_args = ["--", file_path] if file_path else []
+        unstaged = git(repo_path, "diff", *file_args)
+        staged = git(repo_path, "diff", "--cached", *file_args)
         diff_text = staged + ("\n" if staged and unstaged else "") + unstaged
         files_raw = git(repo_path, "diff", "--name-only") + "\n" + git(repo_path, "diff", "--name-only", "--cached")
 
     files = sorted(set(f for f in files_raw.splitlines() if f))
 
     return jsonify({"diff": diff_text, "files": files})
+
+
+@app.route("/api/branches")
+def branches():
+    name = request.args.get("repo", "")
+    repo_path = valid_repo(name)
+
+    raw = git(repo_path, "branch", "-a", "--format=%(refname:short)\t%(HEAD)\t%(upstream:short)\t%(objectname:short)")
+    result = []
+    for line in raw.splitlines():
+        if not line:
+            continue
+        parts = line.split("\t", 3)
+        result.append({
+            "name": parts[0],
+            "current": parts[1].strip() == "*",
+            "upstream": parts[2] if len(parts) > 2 else "",
+            "hash": parts[3] if len(parts) > 3 else "",
+        })
+    return jsonify(result)
+
+
+@app.route("/api/tree")
+def tree():
+    name = request.args.get("repo", "")
+    path = request.args.get("path", "")
+    repo_path = valid_repo(name)
+
+    if ".." in path:
+        abort(400)
+
+    target_dir = (repo_path / path).resolve() if path else repo_path
+    if not str(target_dir).startswith(str(repo_path.resolve())):
+        abort(403)
+    if not target_dir.is_dir():
+        abort(404)
+
+    entries = []
+    for item in target_dir.iterdir():
+        if item.name.startswith("."):
+            continue
+        rel = str(item.relative_to(repo_path))
+        entries.append({
+            "name": item.name,
+            "path": rel,
+            "type": "tree" if item.is_dir() else "blob",
+        })
+    entries.sort(key=lambda e: (0 if e["type"] == "tree" else 1, e["name"].lower()))
+    return jsonify(entries)
+
+
+TEXT_EXTS = {
+    '.py', '.js', '.ts', '.jsx', '.tsx', '.sh', '.bash', '.json', '.yml', '.yaml',
+    '.xml', '.html', '.css', '.toml', '.md', '.txt', '.cfg', '.ini', '.conf',
+    '.env', '.service', '.timer', '.csv', '.sql', '.rb', '.go', '.rs', '.java',
+    '.c', '.h', '.cpp', '.hpp', '.vue', '.svelte', '.gitignore', '.dockerignore',
+    '.dockerfile', '.makefile', '',
+}
+IMAGE_EXTS = {'.jpg', '.jpeg', '.png', '.gif', '.svg', '.webp', '.ico'}
+PDF_EXTS = {'.pdf'}
+
+
+@app.route("/api/blob")
+def blob():
+    name = request.args.get("repo", "")
+    path = request.args.get("path", "")
+    repo_path = valid_repo(name)
+
+    if not path or ".." in path:
+        abort(400)
+
+    file_full = (repo_path / path).resolve()
+    if not str(file_full).startswith(str(repo_path.resolve())):
+        abort(403)
+    if not file_full.is_file():
+        abort(404)
+
+    ext = ('.' + path.rsplit('.', 1)[1]).lower() if '.' in path.rsplit('/', 1)[-1] else ''
+
+    # Binary files (images, PDFs): return raw bytes
+    if ext in IMAGE_EXTS or ext in PDF_EXTS:
+        mime = mimetypes.guess_type(path)[0] or 'application/octet-stream'
+        return send_file(file_full, mimetype=mime, download_name=path.rsplit('/', 1)[-1])
+
+    # Text files: return JSON with content and ext
+    try:
+        content = file_full.read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        abort(500)
+    return jsonify({"content": content, "path": path, "ext": ext})
 
 
 if __name__ == "__main__":
