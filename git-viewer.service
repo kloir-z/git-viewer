@@ -1,0 +1,15 @@
+[Unit]
+Description=Git Viewer
+After=network.target
+
+[Service]
+Type=simple
+User=user
+WorkingDirectory=/home/user/code/git_viewer
+ExecStart=/usr/bin/python3 /home/user/code/git_viewer/app.py
+Restart=on-failure
+RestartSec=5
+Environment=FLASK_ENV=production
+
+[Install]
+WantedBy=multi-user.target

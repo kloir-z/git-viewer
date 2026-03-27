@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Git Viewer</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/diff2html/bundles/css/diff2html.min.css">
+</head>
+<body>
+
+<div class="header">
+  <h1>Git Viewer</h1>
+  <div class="header-controls">
+    <select id="repo-select"></select>
+    <button id="btn-refresh" onclick="refresh()">↻</button>
+  </div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" data-tab="overview" onclick="switchTab('overview')">概要</div>
+  <div class="tab" data-tab="log" onclick="switchTab('log')">ログ</div>
+  <div class="tab" data-tab="diff" onclick="switchTab('diff')">差分</div>
+</div>
+
+<div class="content" id="content"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/diff2html/bundles/js/diff2html-ui.min.js"></script>
+<script>
+const $ = s => document.querySelector(s);
+const $$ = s => document.querySelectorAll(s);
+const content = $('#content');
+const repoSelect = $('#repo-select');
+
+let repos = [];
+let currentRepo = '';
+let currentTab = 'overview';
+let logData = [];
+
+// --- Init ---
+async function init() {
+  repos = await fetchJson('/api/repos');
+  repoSelect.innerHTML = repos.map(r =>
+    `<option value="${r.name}">${r.name}</option>`
+  ).join('');
+  if (repos.length > 0) {
+    currentRepo = repos[0].name;
+    repoSelect.value = currentRepo;
+  }
+  repoSelect.onchange = () => { currentRepo = repoSelect.value; renderTab(); };
+  renderTab();
+}
+
+async function refresh() {
+  repos = await fetchJson('/api/repos');
+  renderTab();
+}
+
+async function fetchJson(url) {
+  try {
+    const r = await fetch(url);
+    if (!r.ok) return [];
+    return await r.json();
+  } catch { return []; }
+}
+
+// --- Tabs ---
+function switchTab(tab) {
+  currentTab = tab;
+  $$('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+  renderTab();
+}
+
+async function renderTab() {
+  if (!currentRepo) { content.innerHTML = '<div class="diff-empty">リポジトリがありません</div>'; return; }
+  if (currentTab === 'overview') await renderOverview();
+  else if (currentTab === 'log') await renderLog();
+  else if (currentTab === 'diff') await renderDiff();
+}
+
+// --- Overview ---
+async function renderOverview() {
+  const info = repos.find(r => r.name === currentRepo);
+  if (!info) return;
+
+  const logs = await fetchJson(`/api/log?repo=${currentRepo}&limit=5`);
+  const diffData = await fetchJson(`/api/diff?repo=${currentRepo}`);
+  const files = diffData.files || [];
+
+  content.innerHTML = `
+    <div class="status-bar">
+      <span><span class="label">branch:</span> <span class="val-branch">${info.branch}</span></span>
+      <span><span class="label">changes:</span> <span class="val-changes">${info.changes} files</span></span>
+      <span><span class="label">latest:</span> <span class="val-time">${timeAgo(info.latest_time)}</span></span>
+      <span><span class="label">remote:</span> <span class="val-remote">${info.remote_status}</span></span>
+    </div>
+    ${files.length > 0 ? `
+      <div class="section-header">changes</div>
+      <div class="list-box">${files.map(f => `
+        <div class="list-row"><span class="badge-m">M</span><span>${esc(f)}</span></div>
+      `).join('')}</div>
+    ` : ''}
+    <div class="section-header">recent commits</div>
+    <div class="list-box">${logs.map(c => `
+      <div class="list-row">
+        <span class="commit-hash">${c.hash}</span>
+        <span class="commit-msg">${esc(c.message)}</span>
+        <span class="commit-time">${timeAgo(c.time)}</span>
+      </div>
+    `).join('')}</div>
+  `;
+}
+
+// --- Log ---
+async function renderLog() {
+  logData = await fetchJson(`/api/log?repo=${currentRepo}&limit=50`);
+
+  content.innerHTML = `
+    <div class="list-box">${logData.map((c, i) => `
+      <div class="list-row clickable" onclick="toggleCommitDiff(this, '${c.hash}', ${i})">
+        <span class="commit-hash">${c.hash}</span>
+        <span class="commit-msg">${esc(c.message)}</span>
+        <span class="commit-stat">${c.files_changed > 0 ? `${c.files_changed}f <span class="stat-add">+${c.insertions}</span> <span class="stat-del">-${c.deletions}</span>` : ''}</span>
+        <span class="commit-time">${timeAgo(c.time)}</span>
+      </div>
+      <div class="diff-inline" id="diff-${i}" style="display:none;"></div>
+    `).join('')}</div>
+  `;
+}
+
+async function toggleCommitDiff(row, hash, idx) {
+  const el = document.getElementById(`diff-${idx}`);
+  if (el.style.display !== 'none') {
+    el.style.display = 'none';
+    return;
+  }
+  el.innerHTML = '<div style="padding:4px 8px;color:var(--text-muted);">Loading...</div>';
+  el.style.display = 'block';
+
+  const data = await fetchJson(`/api/diff?repo=${currentRepo}&commit=${hash}`);
+  if (data.diff) {
+    el.innerHTML = `<div class="diff-container">${renderDiffHtml(data.diff)}</div>`;
+  } else {
+    el.innerHTML = '<div class="diff-empty">差分なし</div>';
+  }
+}
+
+// --- Diff (working tree) ---
+async function renderDiff() {
+  const data = await fetchJson(`/api/diff?repo=${currentRepo}`);
+
+  if (!data.diff) {
+    content.innerHTML = '<div class="diff-empty">未コミットの変更はありません</div>';
+    return;
+  }
+
+  content.innerHTML = `
+    <div class="section-header">uncommitted changes (${(data.files || []).length} files)</div>
+    <div class="diff-container">${renderDiffHtml(data.diff)}</div>
+  `;
+}
+
+// --- Helpers ---
+function renderDiffHtml(diffText) {
+  try {
+    return Diff2Html.html(diffText, {
+      drawFileList: false,
+      matching: 'lines',
+      outputFormat: 'line-by-line',
+    });
+  } catch {
+    return `<pre style="padding:8px;color:var(--text);white-space:pre-wrap;">${esc(diffText)}</pre>`;
+  }
+}
+
+function timeAgo(isoStr) {
+  if (!isoStr) return '';
+  const diff = Date.now() - new Date(isoStr).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return 'now';
+  if (m < 60) return m + 'm';
+  const h = Math.floor(m / 60);
+  if (h < 24) return h + 'h';
+  const d = Math.floor(h / 24);
+  return d + 'd';
+}
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+init();
+</script>
+
+</body>
+</html>
