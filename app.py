@@ -1,4 +1,5 @@
 import mimetypes
+import os
 import re
 import subprocess
 from io import BytesIO
@@ -8,7 +9,7 @@ from flask import Flask, Response, abort, jsonify, render_template, request, sen
 
 app = Flask(__name__)
 
-CODE_DIR = Path("/home/user/code")
+CODE_DIR = Path(os.environ.get("GIT_VIEWER_CODE_DIR", "/home/user/code"))
 
 
 def valid_repo(name: str) -> Path:
