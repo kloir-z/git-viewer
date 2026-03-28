@@ -13,8 +13,14 @@ CODE_DIR = Path(os.environ.get("GIT_VIEWER_CODE_DIR", "/home/user/code"))
 
 
 def valid_repo(name: str) -> Path:
-    """Validate repo name and return path. Abort 404 if not a git repo."""
-    if "/" in name or "\\" in name or name.startswith("."):
+    """Validate repo name and return path. Abort 404 if not a git repo.
+
+    Accepts 'repo' (direct child) or 'category/repo' (two-level).
+    """
+    if "\\" in name or name.startswith(".") or ".." in name:
+        abort(400)
+    parts = name.split("/")
+    if len(parts) > 2 or any(p.startswith(".") for p in parts):
         abort(400)
     repo_path = (CODE_DIR / name).resolve()
     if not str(repo_path).startswith(str(CODE_DIR.resolve())):
@@ -29,9 +35,11 @@ def git(repo_path: Path, *args: str, default: str = "") -> str:
     try:
         result = subprocess.run(
             ["git", "-C", str(repo_path)] + list(args),
-            capture_output=True, text=True, timeout=10
+            capture_output=True, timeout=10,
         )
-        return result.stdout.strip() if result.returncode == 0 else default
+        if result.returncode != 0:
+            return default
+        return result.stdout.decode("utf-8", errors="replace").strip()
     except (subprocess.TimeoutExpired, FileNotFoundError):
         return default
 
@@ -85,8 +93,22 @@ def index():
 def repos():
     repo_list = []
     for item in sorted(CODE_DIR.iterdir(), key=lambda p: p.name.lower()):
-        if item.is_dir() and (item / ".git").is_dir():
-            repo_list.append(get_repo_info(item))
+        if not item.is_dir():
+            continue
+        if (item / ".git").is_dir():
+            # Direct child repo (no category)
+            info = get_repo_info(item)
+            info["category"] = ""
+            repo_list.append(info)
+        else:
+            # Scan as category directory (one level deeper)
+            category = item.name
+            for sub in sorted(item.iterdir(), key=lambda p: p.name.lower()):
+                if sub.is_dir() and (sub / ".git").is_dir():
+                    info = get_repo_info(sub)
+                    info["name"] = f"{category}/{sub.name}"
+                    info["category"] = category
+                    repo_list.append(info)
     return jsonify(repo_list)
 
 

@@ -59,11 +59,31 @@ function loadState() {
 }
 
 // --- Init ---
-async function init() {
-  repos = await fetchJson('/api/repos');
-  repoSelect.innerHTML = repos.map(r =>
+function buildRepoOptions(repoList) {
+  const uncategorized = repoList.filter(r => !r.category);
+  const categories = {};
+  for (const r of repoList) {
+    if (r.category) {
+      if (!categories[r.category]) categories[r.category] = [];
+      categories[r.category].push(r);
+    }
+  }
+  let html = uncategorized.map(r =>
     `<option value="${r.name}">${r.name}</option>`
   ).join('');
+  for (const cat of Object.keys(categories).sort()) {
+    html += `<optgroup label="${cat}">`;
+    html += categories[cat].map(r =>
+      `<option value="${r.name}">${r.name.split('/').pop()}</option>`
+    ).join('');
+    html += `</optgroup>`;
+  }
+  return html;
+}
+
+async function init() {
+  repos = await fetchJson('/api/repos');
+  repoSelect.innerHTML = buildRepoOptions(repos);
 
   const saved = loadState();
   const repoNames = repos.map(r => r.name);
@@ -86,9 +106,7 @@ async function init() {
 
 async function refresh() {
   repos = await fetchJson('/api/repos');
-  repoSelect.innerHTML = repos.map(r =>
-    `<option value="${r.name}">${r.name}</option>`
-  ).join('');
+  repoSelect.innerHTML = buildRepoOptions(repos);
   const repoNames = repos.map(r => r.name);
   if (!repoNames.includes(currentRepo) && repos.length > 0) {
     currentRepo = repos[0].name;
