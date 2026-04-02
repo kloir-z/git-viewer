@@ -326,15 +326,13 @@ button:hover { background: var(--border); }
 .edit-textarea:focus {
   outline: 1px solid var(--accent);
 }
-.edit-wrapper {
-  position: relative;
-}
 .edit-controls {
-  position: absolute;
-  bottom: 8px;
-  right: 8px;
+  position: fixed;
+  bottom: 16px;
+  right: 16px;
   display: flex;
   gap: 6px;
+  z-index: 100;
 }
 .btn-save, .btn-cancel {
   padding: 2px 10px;

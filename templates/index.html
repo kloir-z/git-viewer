@@ -418,7 +418,7 @@ async function editBlob(path) {
     <div class="section-header" style="margin-top:8px;">${esc(path)}
       <span style="margin-left:8px;color:var(--text-muted);font-size:11px;">編集中</span>
     </div>
-    <div class="blob-container edit-wrapper">
+    <div class="blob-container">
       <textarea id="edit-textarea" class="edit-textarea" spellcheck="false">${escaped}</textarea>
       <div class="edit-controls">
         <button class="btn-cancel" onclick="showBlob('${esc(editingPath)}')">キャンセル</button>
