@@ -418,12 +418,12 @@ async function editBlob(path) {
     <div class="section-header" style="margin-top:8px;">${esc(path)}
       <span style="margin-left:8px;color:var(--text-muted);font-size:11px;">編集中</span>
     </div>
-    <div class="blob-container">
+    <div class="blob-container edit-wrapper">
       <textarea id="edit-textarea" class="edit-textarea" spellcheck="false">${escaped}</textarea>
-    </div>
-    <div class="edit-controls">
-      <button class="btn-save" onclick="saveBlob()">保存</button>
-      <button class="btn-cancel" onclick="showBlob('${esc(editingPath)}')">キャンセル</button>
+      <div class="edit-controls">
+        <button class="btn-cancel" onclick="showBlob('${esc(editingPath)}')">キャンセル</button>
+        <button class="btn-save" onclick="saveBlob()">保存</button>
+      </div>
     </div>`;
 
   const ta = document.getElementById('edit-textarea');
