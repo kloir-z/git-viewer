@@ -1,5 +1,11 @@
 # CLAUDE.md
 
+> **CLAUDE.md編集ポリシー**: このファイルは最小限に保つ。内容を追加・修正する前に、参照先ドキュメント（docs/ 等）に書くべきかユーザーに確認すること。
+
+## 行動指針
+
+- **サービス再起動**: `app.py` やフロントエンドを変更した場合、動作確認のためサービスを再起動する。Windowsでは `powershell -Command "Start-Process powershell -ArgumentList '-Command','Restart-Service git-viewer' -Verb RunAs"`、Raspberry Piでは `sudo systemctl restart git-viewer.service`。
+
 ## Project overview
 
 Git Viewer is a read-only web UI for browsing local git repositories. Flask backend + vanilla JS SPA frontend. Designed for Raspberry Pi, runs on port 5125.
