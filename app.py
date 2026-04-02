@@ -2,7 +2,7 @@ import mimetypes
 import os
 import re
 import subprocess
-from io import BytesIO
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from flask import Flask, Response, abort, jsonify, render_template, request, send_file
@@ -91,24 +91,29 @@ def index():
 
 @app.route("/api/repos")
 def repos():
-    repo_list = []
+    # Collect all repo paths first, then fetch info in parallel
+    repo_entries = []  # (path, category)
     for item in sorted(CODE_DIR.iterdir(), key=lambda p: p.name.lower()):
         if not item.is_dir():
             continue
         if (item / ".git").is_dir():
-            # Direct child repo (no category)
-            info = get_repo_info(item)
-            info["category"] = ""
-            repo_list.append(info)
+            repo_entries.append((item, ""))
         else:
-            # Scan as category directory (one level deeper)
             category = item.name
             for sub in sorted(item.iterdir(), key=lambda p: p.name.lower()):
                 if sub.is_dir() and (sub / ".git").is_dir():
-                    info = get_repo_info(sub)
-                    info["name"] = f"{category}/{sub.name}"
-                    info["category"] = category
-                    repo_list.append(info)
+                    repo_entries.append((sub, category))
+
+    def fetch_info(entry):
+        path, category = entry
+        info = get_repo_info(path)
+        if category:
+            info["name"] = f"{category}/{path.name}"
+        info["category"] = category
+        return info
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        repo_list = list(pool.map(fetch_info, repo_entries))
     return jsonify(repo_list)
 
 
@@ -232,7 +237,7 @@ def tree():
 
     entries = []
     for item in target_dir.iterdir():
-        rel = str(item.relative_to(repo_path))
+        rel = str(item.relative_to(repo_path)).replace("\\", "/")
         entries.append({
             "name": item.name,
             "path": rel,
@@ -268,7 +273,8 @@ def blob():
     if not file_full.is_file():
         abort(404)
 
-    ext = ('.' + path.rsplit('.', 1)[1]).lower() if '.' in path.rsplit('/', 1)[-1] else ''
+    filename = path.replace("\\", "/").rsplit("/", 1)[-1]
+    ext = ('.' + filename.rsplit('.', 1)[1]).lower() if '.' in filename else ''
 
     # Binary files (images, PDFs): return raw bytes
     if ext in IMAGE_EXTS or ext in PDF_EXTS:
@@ -281,6 +287,35 @@ def blob():
     except Exception:
         abort(500)
     return jsonify({"content": content, "path": path, "ext": ext})
+
+
+@app.route("/api/blob", methods=["PUT"])
+def blob_write():
+    data = request.get_json()
+    if not data:
+        abort(400)
+    name = data.get("repo", "")
+    path = data.get("path", "")
+    file_content = data.get("content")
+    if file_content is None:
+        abort(400)
+
+    repo_path = valid_repo(name)
+
+    if not path or ".." in path:
+        abort(400)
+
+    file_full = (repo_path / path).resolve()
+    if not str(file_full).startswith(str(repo_path.resolve())):
+        abort(403)
+    if not file_full.is_file():
+        abort(404)
+
+    try:
+        file_full.write_text(file_content, encoding="utf-8")
+    except Exception:
+        abort(500)
+    return jsonify({"ok": True})
 
 
 if __name__ == "__main__":
