@@ -383,16 +383,67 @@ async function showBlob(path) {
   const fileExt = data.ext || '';
   if (fileExt === '.md') {
     blobView.innerHTML = `
-      <div class="section-header" style="margin-top:8px;">${esc(path)}</div>
+      <div class="section-header" style="margin-top:8px;">${esc(path)}<button class="btn-edit" onclick="editBlob('${esc(path)}')">編集</button></div>
       <div class="blob-container markdown-body" style="padding:12px;">${marked.parse(data.content)}</div>`;
     blobView.querySelectorAll('pre code').forEach(block => hljs.highlightElement(block));
   } else {
     const lang = LANG_MAP[fileExt] || 'plaintext';
     const escaped = data.content.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     blobView.innerHTML = `
-      <div class="section-header" style="margin-top:8px;">${esc(path)}</div>
+      <div class="section-header" style="margin-top:8px;">${esc(path)}<button class="btn-edit" onclick="editBlob('${esc(path)}')">編集</button></div>
       <div class="blob-container"><pre class="blob-content"><code class="language-${lang}">${escaped}</code></pre></div>`;
     blobView.querySelectorAll('pre code').forEach(block => hljs.highlightElement(block));
+  }
+}
+
+let editingPath = '';
+let editingOriginal = '';
+
+async function editBlob(path) {
+  const blobView = document.getElementById('blob-view');
+  if (!blobView) return;
+
+  editingPath = path;
+  const blobUrl = `/api/blob?repo=${currentRepo}&path=${encodeURIComponent(path)}`;
+  const data = await fetchJson(blobUrl);
+  if (data.content === undefined) {
+    blobView.innerHTML = '<div class="diff-empty">ファイルを編集できません</div>';
+    return;
+  }
+
+  editingOriginal = data.content;
+  const escaped = data.content.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+  blobView.innerHTML = `
+    <div class="section-header" style="margin-top:8px;">${esc(path)}
+      <span style="margin-left:8px;color:var(--text-muted);font-size:11px;">編集中</span>
+    </div>
+    <div class="blob-container">
+      <textarea id="edit-textarea" class="edit-textarea" spellcheck="false">${escaped}</textarea>
+    </div>
+    <div class="edit-controls">
+      <button class="btn-save" onclick="saveBlob()">保存</button>
+      <button class="btn-cancel" onclick="showBlob('${esc(editingPath)}')">キャンセル</button>
+    </div>`;
+
+  const ta = document.getElementById('edit-textarea');
+  ta.style.height = Math.max(200, ta.scrollHeight) + 'px';
+}
+
+async function saveBlob() {
+  const ta = document.getElementById('edit-textarea');
+  if (!ta) return;
+
+  const res = await fetch('/api/blob', {
+    method: 'PUT',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({repo: currentRepo, path: editingPath, content: ta.value}),
+  });
+
+  if (res.ok) {
+    showBlob(editingPath);
+  } else {
+    alert('保存に失敗しました');
   }
 }
 
