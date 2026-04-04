@@ -13,7 +13,9 @@
 <body>
 
 <div class="header">
-  <h1>Git Viewer</h1>
+  <select id="fav-select" onchange="jumpToFavorite(this.value); this.value='';">
+    <option value="">&#9733; Favorites</option>
+  </select>
   <div class="header-controls">
     <select id="repo-select"></select>
     <button id="btn-refresh" onclick="refresh()">↻</button>
@@ -38,12 +40,14 @@ const $ = s => document.querySelector(s);
 const $$ = s => document.querySelectorAll(s);
 const content = $('#content');
 const repoSelect = $('#repo-select');
+const favSelect = $('#fav-select');
 
 let repos = [];
 let currentRepo = '';
 let currentTab = 'overview';
 let logData = [];
 let diffFormat = 'line-by-line';
+let favorites = [];
 
 // --- State persistence ---
 const STATE_KEY = 'gitviewer_state';
@@ -81,9 +85,46 @@ function buildRepoOptions(repoList) {
   return html;
 }
 
+function buildFavOptions() {
+  let html = '<option value="">&#9733; Favorites</option>';
+  for (const fav of favorites) {
+    let label = fav;
+    for (const r of repos) {
+      if (fav.startsWith(r.name + '/')) {
+        const dirPath = fav.substring(r.name.length + 1);
+        label = r.name + ' / ' + dirPath;
+        break;
+      }
+      if (fav === r.name) {
+        label = r.name;
+        break;
+      }
+    }
+    html += `<option value="${esc(fav)}">${esc(label)}</option>`;
+  }
+  favSelect.innerHTML = html;
+}
+
+function jumpToFavorite(fav) {
+  if (!fav) return;
+  for (const r of repos) {
+    if (fav.startsWith(r.name + '/') || fav === r.name) {
+      const dirPath = fav.startsWith(r.name + '/') ? fav.substring(r.name.length + 1) : '';
+      currentRepo = r.name;
+      repoSelect.value = currentRepo;
+      currentTab = 'files';
+      $$('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'files'));
+      renderFiles(dirPath);
+      return;
+    }
+  }
+}
+
 async function init() {
   repos = await fetchJson('/api/repos');
+  favorites = await fetchJson('/api/favorites');
   repoSelect.innerHTML = buildRepoOptions(repos);
+  buildFavOptions();
 
   const saved = loadState();
   const repoNames = repos.map(r => r.name);
