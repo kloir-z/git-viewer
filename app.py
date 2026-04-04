@@ -1,3 +1,4 @@
+import json
 import mimetypes
 import os
 import re
@@ -10,6 +11,20 @@ from flask import Flask, Response, abort, jsonify, render_template, request, sen
 app = Flask(__name__)
 
 CODE_DIR = Path(os.environ.get("GIT_VIEWER_CODE_DIR", "/home/user/code"))
+FAVORITES_FILE = Path(__file__).parent / "favorites.json"
+
+
+def read_favorites() -> list:
+    if FAVORITES_FILE.is_file():
+        try:
+            return json.loads(FAVORITES_FILE.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return []
+    return []
+
+
+def write_favorites(favs: list):
+    FAVORITES_FILE.write_text(json.dumps(favs, ensure_ascii=False), encoding="utf-8")
 
 
 def valid_repo(name: str) -> Path:
@@ -315,6 +330,37 @@ def blob_write():
         file_full.write_text(file_content, encoding="utf-8")
     except Exception:
         abort(500)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/favorites")
+def favorites():
+    return jsonify(read_favorites())
+
+
+@app.route("/api/favorites", methods=["POST"])
+def add_favorite():
+    data = request.get_json()
+    if not data or "path" not in data:
+        abort(400)
+    path = data["path"]
+    favs = read_favorites()
+    if path not in favs:
+        favs.append(path)
+        write_favorites(favs)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/favorites", methods=["DELETE"])
+def remove_favorite():
+    data = request.get_json()
+    if not data or "path" not in data:
+        abort(400)
+    path = data["path"]
+    favs = read_favorites()
+    if path in favs:
+        favs.remove(path)
+        write_favorites(favs)
     return jsonify({"ok": True})
 
 
