@@ -354,3 +354,15 @@ button:hover { background: var(--border); }
   background: var(--bg-tertiary);
   color: var(--text);
 }
+
+/* Favorite star */
+.fav-star {
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+.fav-star:hover { opacity: 0.8; }
+.fav-star.active { color: var(--yellow); }
+.fav-star:not(.active) { color: var(--text-dim); }

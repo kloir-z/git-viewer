@@ -105,6 +105,24 @@ function buildFavOptions() {
   favSelect.innerHTML = html;
 }
 
+async function toggleFavorite(event, repoName, dirPath) {
+  event.stopPropagation();
+  const favKey = repoName + '/' + dirPath;
+  const isFav = favorites.includes(favKey);
+  await fetch('/api/favorites', {
+    method: isFav ? 'DELETE' : 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({path: favKey}),
+  });
+  if (isFav) {
+    favorites = favorites.filter(f => f !== favKey);
+  } else {
+    favorites.push(favKey);
+  }
+  buildFavOptions();
+  renderFiles();
+}
+
 function jumpToFavorite(fav) {
   if (!fav) return;
   for (const r of repos) {
@@ -334,7 +352,7 @@ async function renderFiles(path) {
     <div class="list-box">
       ${currentPath ? `<div class="list-row clickable" onclick="renderFiles('${parentPath(currentPath)}')"><span class="tree-icon">${ICON_FOLDER_OPEN}</span><span>..</span></div>` : ''}
       ${(entries || []).map(e => e.type === 'tree'
-        ? `<div class="list-row clickable" onclick="renderFiles('${esc(e.path)}')"><span class="tree-icon">${ICON_FOLDER}</span><span>${esc(e.name)}</span></div>`
+        ? `<div class="list-row clickable" onclick="renderFiles('${esc(e.path)}')"><span class="tree-icon">${ICON_FOLDER}</span><span>${esc(e.name)}</span><span class="fav-star ${favorites.includes(currentRepo + '/' + e.path) ? 'active' : ''}" onclick="toggleFavorite(event, currentRepo, '${esc(e.path)}')">${favorites.includes(currentRepo + '/' + e.path) ? '★' : '☆'}</span></div>`
         : `<div class="list-row clickable" onclick="showBlob('${esc(e.path)}')"><span class="tree-icon">${ICON_FILE}</span><span>${esc(e.name)}</span></div>`
       ).join('')}
     </div>
