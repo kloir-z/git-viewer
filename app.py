@@ -104,6 +104,19 @@ def index():
     return render_template("index.html")
 
 
+@app.route("/api/check")
+def check():
+    """Lightweight endpoint: return HEAD hash + change count for polling."""
+    repo_name = request.args.get("repo", "")
+    if not repo_name:
+        return jsonify({"head": "", "changes": 0})
+    repo_path = valid_repo(repo_name)
+    head = git(repo_path, "rev-parse", "HEAD", default="")
+    status = git(repo_path, "status", "--porcelain")
+    changes = len(status.splitlines()) if status else 0
+    return jsonify({"head": head, "changes": changes})
+
+
 @app.route("/api/repos")
 def repos():
     # Collect all repo paths first, then fetch info in parallel

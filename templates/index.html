@@ -49,6 +49,48 @@ let logData = [];
 let diffFormat = 'line-by-line';
 let favorites = [];
 
+// --- Change detection polling ---
+let lastCheck = { head: '', changes: -1 };
+let checkTimer = null;
+
+function startChangePolling() {
+  stopChangePolling();
+  pollCheck();
+  checkTimer = setInterval(pollCheck, 10000);
+}
+function stopChangePolling() {
+  if (checkTimer) { clearInterval(checkTimer); checkTimer = null; }
+}
+async function pollCheck() {
+  if (!currentRepo) return;
+  try {
+    const data = await fetchJson(`/api/check?repo=${currentRepo}`);
+    if (lastCheck.head === '' && lastCheck.changes === -1) {
+      lastCheck = { head: data.head, changes: data.changes };
+      return;
+    }
+    if (data.head !== lastCheck.head || data.changes !== lastCheck.changes) {
+      lastCheck = { head: data.head, changes: data.changes };
+      showChangeBadge();
+    }
+  } catch {}
+}
+function showChangeBadge() {
+  if (document.getElementById('change-badge')) return;
+  const badge = document.createElement('span');
+  badge.id = 'change-badge';
+  badge.textContent = '更新あり';
+  badge.className = 'change-badge';
+  badge.onclick = () => { badge.remove(); renderTab(); };
+  const header = document.querySelector('.header-controls') || document.querySelector('.header');
+  if (header) header.appendChild(badge);
+}
+function resetChangeState() {
+  lastCheck = { head: '', changes: -1 };
+  const badge = document.getElementById('change-badge');
+  if (badge) badge.remove();
+}
+
 // --- State persistence ---
 const STATE_KEY = 'gitviewer_state';
 function saveState() {
@@ -159,7 +201,8 @@ async function init() {
   }
   if (saved.path) currentPath = saved.path;
 
-  repoSelect.onchange = () => { currentRepo = repoSelect.value; currentPath = ''; saveState(); renderTab(); };
+  repoSelect.onchange = () => { currentRepo = repoSelect.value; currentPath = ''; saveState(); resetChangeState(); startChangePolling(); renderTab(); };
+  startChangePolling();
   renderTab();
 }
 
@@ -441,9 +484,33 @@ async function showBlob(path) {
 
   const fileExt = data.ext || '';
   if (fileExt === '.md') {
+    const mdPrefs = JSON.parse(localStorage.getItem('mdPrefs') || '{}');
+    const fontSize = mdPrefs.fontSize || '13';
+    const spacing = mdPrefs.spacing || '6';
+    const theme = mdPrefs.theme || 'dark';
+    const themeClass = theme === 'dark' ? '' : ` md-theme-${theme}`;
     blobView.innerHTML = `
       <div class="section-header" style="margin-top:8px;">${esc(path)}<button class="btn-edit" onclick="editBlob('${esc(path)}')">編集</button></div>
-      <div class="blob-container markdown-body" style="padding:12px;">${marked.parse(data.content)}</div>`;
+      <div class="md-toolbar">
+        <label>文字サイズ<select id="md-font-size" onchange="updateMdPref('fontSize',this.value)">
+          <option value="11"${fontSize==='11'?' selected':''}>小</option>
+          <option value="13"${fontSize==='13'?' selected':''}>中</option>
+          <option value="15"${fontSize==='15'?' selected':''}>大</option>
+          <option value="18"${fontSize==='18'?' selected':''}>特大</option>
+        </select></label>
+        <label>段落間隔<select id="md-spacing" onchange="updateMdPref('spacing',this.value)">
+          <option value="4"${spacing==='4'?' selected':''}>狭い</option>
+          <option value="6"${spacing==='6'?' selected':''}>普通</option>
+          <option value="10"${spacing==='10'?' selected':''}>広い</option>
+          <option value="16"${spacing==='16'?' selected':''}>とても広い</option>
+        </select></label>
+        <label>テーマ<select id="md-theme" onchange="updateMdPref('theme',this.value)">
+          <option value="dark"${theme==='dark'?' selected':''}>ダーク</option>
+          <option value="light"${theme==='light'?' selected':''}>ライト</option>
+          <option value="sepia"${theme==='sepia'?' selected':''}>セピア</option>
+        </select></label>
+      </div>
+      <div class="blob-container markdown-body${themeClass}" id="md-body" style="padding:12px;--md-font-size:${fontSize}px;--md-spacing:${spacing}px;">${marked.parse(data.content)}</div>`;
     blobView.querySelectorAll('pre code').forEach(block => hljs.highlightElement(block));
   } else {
     const lang = LANG_MAP[fileExt] || 'plaintext';
@@ -452,6 +519,20 @@ async function showBlob(path) {
       <div class="section-header" style="margin-top:8px;">${esc(path)}<button class="btn-edit" onclick="editBlob('${esc(path)}')">編集</button></div>
       <div class="blob-container"><pre class="blob-content"><code class="language-${lang}">${escaped}</code></pre></div>`;
     blobView.querySelectorAll('pre code').forEach(block => hljs.highlightElement(block));
+  }
+}
+
+function updateMdPref(key, value) {
+  const prefs = JSON.parse(localStorage.getItem('mdPrefs') || '{}');
+  prefs[key] = value;
+  localStorage.setItem('mdPrefs', JSON.stringify(prefs));
+  const body = document.getElementById('md-body');
+  if (!body) return;
+  if (key === 'fontSize') body.style.setProperty('--md-font-size', value + 'px');
+  if (key === 'spacing') body.style.setProperty('--md-spacing', value + 'px');
+  if (key === 'theme') {
+    body.classList.remove('md-theme-light', 'md-theme-sepia');
+    if (value !== 'dark') body.classList.add('md-theme-' + value);
   }
 }
 
