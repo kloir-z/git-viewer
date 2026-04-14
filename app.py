@@ -79,10 +79,41 @@ def git(repo_path: Path, *args: str, default: str = "") -> str:
 def get_repo_info(repo_path: Path) -> dict:
     """Gather status info for a single repo."""
     name = repo_path.name
-    branch = git(repo_path, "rev-parse", "--abbrev-ref", "HEAD", default="unknown")
 
-    status_lines = git(repo_path, "status", "--porcelain")
-    changes = len(status_lines.splitlines()) if status_lines else 0
+    # One porcelain v2 call yields branch, upstream, ahead/behind, and changes.
+    # On Windows, each git invocation costs ~60-80ms, so fewer calls matters.
+    status_raw = git(repo_path, "status", "--porcelain=v2", "--branch")
+    branch = "unknown"
+    changes = 0
+    has_upstream = False
+    ahead = behind = 0
+    for line in status_raw.splitlines():
+        if line.startswith("# branch.head "):
+            branch = line[len("# branch.head "):]
+        elif line.startswith("# branch.upstream "):
+            has_upstream = True
+        elif line.startswith("# branch.ab "):
+            parts = line[len("# branch.ab "):].split()
+            if len(parts) == 2:
+                try:
+                    ahead = int(parts[0].lstrip("+"))
+                    behind = int(parts[1].lstrip("-"))
+                except ValueError:
+                    pass
+        elif line and not line.startswith("#"):
+            changes += 1
+
+    if has_upstream:
+        if ahead > 0 and behind > 0:
+            remote_status = f"ahead {ahead}, behind {behind}"
+        elif ahead > 0:
+            remote_status = f"ahead {ahead}"
+        elif behind > 0:
+            remote_status = f"behind {behind}"
+        else:
+            remote_status = "up to date"
+    else:
+        remote_status = "no remote"
 
     log_line = git(repo_path, "log", "-1", "--format=%h\t%s\t%aI")
     if log_line and "\t" in log_line:
@@ -90,20 +121,6 @@ def get_repo_info(repo_path: Path) -> dict:
         latest_commit, latest_message, latest_time = parts[0], parts[1], parts[2]
     else:
         latest_commit, latest_message, latest_time = "", "", ""
-
-    remote_raw = git(repo_path, "rev-list", "--left-right", "--count", "HEAD...@{upstream}")
-    if remote_raw and "\t" in remote_raw:
-        ahead, behind = remote_raw.split("\t")
-        if int(ahead) > 0 and int(behind) > 0:
-            remote_status = f"ahead {ahead}, behind {behind}"
-        elif int(ahead) > 0:
-            remote_status = f"ahead {ahead}"
-        elif int(behind) > 0:
-            remote_status = f"behind {behind}"
-        else:
-            remote_status = "up to date"
-    else:
-        remote_status = "no remote"
 
     return {
         "name": name,
