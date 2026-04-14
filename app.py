@@ -151,6 +151,20 @@ def check():
     return jsonify({"head": head, "changes": changes})
 
 
+@app.route("/api/info")
+def info():
+    """Single-repo info (same shape as one entry in /api/repos)."""
+    name = request.args.get("repo", "")
+    repo_path = valid_repo(name)
+    data = get_repo_info(repo_path)
+    if "/" in name:
+        data["name"] = name
+        data["category"] = name.split("/", 1)[0]
+    else:
+        data["category"] = ""
+    return jsonify(data)
+
+
 @app.route("/api/repos")
 def repos():
     # Collect all repo paths first, then fetch info in parallel
