@@ -16,7 +16,12 @@ pip install -r requirements.txt  # flask>=3.0
 python app.py                    # http://localhost:5125
 ```
 
-By default it scans all git repos under `/home/user/code/`. Change `CODE_DIR` in `app.py` to point to your directory.
+By default it scans all git repos under `/home/user/code/`. To point at a different directory, either:
+
+- Set the `GIT_VIEWER_CODE_DIR` environment variable, or
+- Copy `config.local.json.example` to `config.local.json` and edit `code_dir` (gitignored, per-machine).
+
+The environment variable takes precedence over the config file.
 
 ### systemd (optional)
 

@@ -50,4 +50,4 @@ set GIT_VIEWER_CODE_DIR=C:/code && python app.py
 GIT_VIEWER_CODE_DIR="C:/code" python app.py
 ```
 
-CODE_DIR defaults to `/home/user/code/`. Override with `GIT_VIEWER_CODE_DIR` env var. Subdirectories under CODE_DIR are treated as category folders.
+CODE_DIR resolution order: `GIT_VIEWER_CODE_DIR` env var → `config.local.json` (gitignored, key `code_dir`) → default `/home/user/code/`. Subdirectories under CODE_DIR are treated as category folders.

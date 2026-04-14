@@ -10,7 +10,24 @@ from flask import Flask, Response, abort, jsonify, render_template, request, sen
 
 app = Flask(__name__)
 
-CODE_DIR = Path(os.environ.get("GIT_VIEWER_CODE_DIR", "/home/user/code"))
+CONFIG_FILE = Path(__file__).parent / "config.local.json"
+
+
+def load_code_dir() -> Path:
+    env_value = os.environ.get("GIT_VIEWER_CODE_DIR")
+    if env_value:
+        return Path(env_value)
+    if CONFIG_FILE.is_file():
+        try:
+            config = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+            if config.get("code_dir"):
+                return Path(config["code_dir"])
+        except (json.JSONDecodeError, OSError):
+            pass
+    return Path("/home/user/code")
+
+
+CODE_DIR = load_code_dir()
 FAVORITES_FILE = Path(__file__).parent / "favorites.json"
 
 
