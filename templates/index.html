@@ -490,22 +490,28 @@ async function fetchBookmark(path) {
 
 async function setBookmark(path, type, index) {
   try {
-    await fetch('/api/bookmark', {
+    const r = await fetch('/api/bookmark', {
       method: 'PUT',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({repo: currentRepo, path, type, index}),
     });
-  } catch {}
+    if (!r.ok) alert('しおりの保存に失敗しました');
+  } catch {
+    alert('しおりの保存に失敗しました');
+  }
 }
 
 async function deleteBookmark(path) {
   try {
-    await fetch('/api/bookmark', {
+    const r = await fetch('/api/bookmark', {
       method: 'DELETE',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({repo: currentRepo, path}),
     });
-  } catch {}
+    if (!r.ok) alert('しおりの削除に失敗しました');
+  } catch {
+    alert('しおりの削除に失敗しました');
+  }
 }
 
 function splitHighlightedIntoLines(html) {
@@ -562,9 +568,11 @@ function applyBookmarkUi(blobView, bm) {
       const gutter = blobView.querySelector(`.code-line-num[data-bm-line="${bm.index}"]`);
       if (gutter) gutter.classList.add('bookmarked');
     }
-  }
-  if (jumpBtn) {
-    jumpBtn.innerHTML = `<button class="btn-jump" onclick="jumpToBookmark()" title="しおりへ">📑</button>`;
+    if (jumpBtn) {
+      jumpBtn.innerHTML = `<button class="btn-jump" onclick="jumpToBookmark()" title="しおりへ">📑</button>`;
+    }
+  } else if (jumpBtn) {
+    jumpBtn.innerHTML = '';
   }
 }
 
