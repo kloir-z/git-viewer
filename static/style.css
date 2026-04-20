@@ -468,6 +468,7 @@ button:hover { background: var(--border); }
   overflow-x: auto;
   background: #161b22;
 }
+.code-body code.hljs { padding: 0 !important; }
 .code-line {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
   font-size: 12px;
