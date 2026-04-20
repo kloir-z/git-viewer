@@ -475,6 +475,7 @@ button:hover { background: var(--border); }
   line-height: 1.4;
   white-space: pre;
   color: var(--text);
+  touch-action: manipulation;
 }
 .code-line.bookmarked {
   background: rgba(240, 192, 74, 0.08);

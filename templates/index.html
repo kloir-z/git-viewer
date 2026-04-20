@@ -710,7 +710,7 @@ async function showBlob(path) {
           <pre class="code-body"><code class="language-${lang} hljs">${bodyHtml}</code></pre>
         </div>
       </div>`;
-    blobView.querySelectorAll('.code-gutter .code-line-num').forEach(el => {
+    blobView.querySelectorAll('.code-gutter .code-line-num, .code-body .code-line').forEach(el => {
       el.addEventListener('dblclick', () => {
         const line = Number(el.getAttribute('data-bm-line'));
         onBookmarkClick(path, 'text', line);
