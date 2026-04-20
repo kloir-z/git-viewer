@@ -475,5 +475,24 @@ def bookmark_set():
     return jsonify({"ok": True})
 
 
+@app.route("/api/bookmark", methods=["DELETE"])
+def bookmark_remove():
+    data = request.get_json()
+    if not data:
+        abort(400)
+    name = data.get("repo", "")
+    path = data.get("path", "")
+    valid_repo(name)
+    if not path or ".." in path:
+        abort(400)
+    bms = read_bookmarks()
+    if name in bms and path in bms[name]:
+        del bms[name][path]
+        if not bms[name]:
+            del bms[name]
+        write_bookmarks(bms)
+    return jsonify({"ok": True})
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5125, debug=False)
