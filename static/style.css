@@ -433,7 +433,7 @@ button:hover { background: var(--border); }
 .fav-star:not(.active) { color: var(--text-dim); }
 
 /* Bookmark (read marker) */
-.bm-target { position: relative; cursor: pointer; }
+.bm-target { position: relative; cursor: pointer; touch-action: manipulation; }
 .bm-target:hover::before {
   content: "📑";
   position: absolute;
@@ -467,7 +467,7 @@ button:hover { background: var(--border); }
   font-size: 12px;
   line-height: 1.4;
 }
-.code-line-num { cursor: pointer; padding: 0 4px; }
+.code-line-num { cursor: pointer; padding: 0 4px; touch-action: manipulation; }
 .code-line-num:hover { color: #f0c04a; background: rgba(240, 192, 74, 0.12); }
 .code-line-num.bookmarked {
   color: #0d1117;

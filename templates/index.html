@@ -680,7 +680,7 @@ async function showBlob(path) {
     Array.from(mdBody.children).forEach((el, idx) => {
       el.setAttribute('data-bm-idx', String(idx));
       el.classList.add('bm-target');
-      el.addEventListener('click', (e) => {
+      el.addEventListener('dblclick', (e) => {
         if (e.target.closest('a, button, input, select, textarea, img')) return;
         onBookmarkClick(path, 'md', idx);
       });
@@ -711,7 +711,7 @@ async function showBlob(path) {
         </div>
       </div>`;
     blobView.querySelectorAll('.code-gutter .code-line-num').forEach(el => {
-      el.addEventListener('click', () => {
+      el.addEventListener('dblclick', () => {
         const line = Number(el.getAttribute('data-bm-line'));
         onBookmarkClick(path, 'text', line);
       });
