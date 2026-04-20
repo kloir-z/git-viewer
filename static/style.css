@@ -263,15 +263,6 @@ button:hover { background: var(--border); }
   overflow-x: auto;
   margin-bottom: 8px;
 }
-.blob-content {
-  padding: 8px;
-  color: var(--text);
-  font-size: 12px;
-  line-height: 1.4;
-  white-space: pre;
-  margin: 0;
-}
-
 /* Markdown toolbar */
 .md-toolbar {
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;

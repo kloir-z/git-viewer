@@ -12,6 +12,22 @@ Spec: `docs/superpowers/specs/2026-04-20-read-bookmark-design.md`
 
 ---
 
+## Post-Implementation Deviations
+
+The plan below reflects the state at the start of implementation. The following changes were made interactively during the session and are now the source of truth (see spec for the updated description):
+
+- **Click → Double-click.** All bookmark toggle gestures (Markdown block, code gutter, code body line) are `dblclick` instead of `click`, to avoid accidental toggles while navigating. `touch-action: manipulation` was added on `.bm-target`, `.code-line-num`, and `.code-line` so mobile double-tap-zoom does not steal the gesture.
+- **Code body lines are also clickable.** In addition to the gutter, `.code-line` elements respond to dblclick and set a bookmark for that line. Single-click still preserves text selection.
+- **Bookmark icons (📑) removed.** The hover hint and the active-state 📑 on Markdown blocks were dropped (they cluttered the reading flow). The jump button in the section header now shows the plain text `しおりへ` instead of a 📑 glyph.
+- **Inset yellow bar removed from code body lines.** Only the light-yellow background remains; the gutter cell continues to show the saturated yellow marker. The bar overlapped text.
+- **Alignment fix for the code body.** Added `.code-body code.hljs { padding: 0 !important; }` to cancel the `padding: 1em` that the highlight.js github-dark CDN CSS applies to `pre code.hljs`, which otherwise offsets the body about one line below the gutter.
+- **Error notifications use `alert()`.** The spec called for "小さなトースト通知1回"; the project has no toast infrastructure, so `alert()` was used (matching `saveBlob`). Both `setBookmark` and `deleteBookmark` check `r.ok` and surface failures this way.
+- **Jump button is hidden when the bookmarked target no longer exists** (e.g. after the file was edited to have fewer blocks/lines). Previously the button appeared unconditionally and silently did nothing.
+
+The original task text below is preserved as the implementation artifact; refer to the spec for current behavior.
+
+---
+
 ### Task 1: Update `.gitignore` for JSON stores
 
 **Files:**
