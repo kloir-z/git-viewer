@@ -441,5 +441,17 @@ def remove_favorite():
     return jsonify({"ok": True})
 
 
+@app.route("/api/bookmark")
+def bookmark_get():
+    name = request.args.get("repo", "")
+    path = request.args.get("path", "")
+    valid_repo(name)
+    if not path or ".." in path:
+        abort(400)
+    bms = read_bookmarks()
+    entry = bms.get(name, {}).get(path)
+    return jsonify(entry or {})
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5125, debug=False)
