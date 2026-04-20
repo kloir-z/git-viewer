@@ -644,7 +644,7 @@ async function showBlob(path) {
     const theme = mdPrefs.theme || 'dark';
     const themeClass = theme === 'dark' ? '' : ` md-theme-${theme}`;
     blobView.innerHTML = `
-      <div class="section-header" style="margin-top:8px;">${esc(path)}<button class="btn-edit" onclick="editBlob('${esc(path)}')">編集</button></div>
+      <div class="section-header" style="margin-top:8px;">${esc(path)}<span id="bm-jump-btn"></span><button class="btn-edit" onclick="editBlob('${esc(path)}')">編集</button></div>
       <div class="md-toolbar">
         <label>文字サイズ<select id="md-font-size" onchange="updateMdPref('fontSize',this.value)">
           <option value="11"${fontSize==='11'?' selected':''}>小</option>
@@ -669,6 +669,16 @@ async function showBlob(path) {
     mdBody.innerHTML = marked.parse(data.content);
     rewriteMdAssets(mdBody, parentPath(path));
     blobView.querySelectorAll('pre code').forEach(block => hljs.highlightElement(block));
+    Array.from(mdBody.children).forEach((el, idx) => {
+      el.setAttribute('data-bm-idx', String(idx));
+      el.classList.add('bm-target');
+      el.addEventListener('click', (e) => {
+        if (e.target.closest('a, button, input, select, textarea, img')) return;
+        onBookmarkClick(path, 'md', idx);
+      });
+    });
+    const bm = await fetchBookmark(path);
+    applyBookmarkUi(blobView, bm);
   } else {
     const lang = LANG_MAP[fileExt] || 'plaintext';
     const escaped = data.content.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
