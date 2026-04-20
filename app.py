@@ -44,6 +44,22 @@ def write_favorites(favs: list):
     FAVORITES_FILE.write_text(json.dumps(favs, ensure_ascii=False), encoding="utf-8")
 
 
+BOOKMARKS_FILE = Path(__file__).parent / "bookmarks.json"
+
+
+def read_bookmarks() -> dict:
+    if BOOKMARKS_FILE.is_file():
+        try:
+            return json.loads(BOOKMARKS_FILE.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return {}
+    return {}
+
+
+def write_bookmarks(bms: dict):
+    BOOKMARKS_FILE.write_text(json.dumps(bms, ensure_ascii=False), encoding="utf-8")
+
+
 def valid_repo(name: str) -> Path:
     """Validate repo name and return path. Abort 404 if not a git repo.
 
