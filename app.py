@@ -453,5 +453,27 @@ def bookmark_get():
     return jsonify(entry or {})
 
 
+@app.route("/api/bookmark", methods=["PUT"])
+def bookmark_set():
+    data = request.get_json()
+    if not data:
+        abort(400)
+    name = data.get("repo", "")
+    path = data.get("path", "")
+    btype = data.get("type", "")
+    index = data.get("index")
+    if btype not in ("md", "text") or not isinstance(index, int):
+        abort(400)
+    valid_repo(name)
+    if not path or ".." in path:
+        abort(400)
+    bms = read_bookmarks()
+    if name not in bms:
+        bms[name] = {}
+    bms[name][path] = {"type": btype, "index": index}
+    write_bookmarks(bms)
+    return jsonify({"ok": True})
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5125, debug=False)
