@@ -479,7 +479,6 @@ button:hover { background: var(--border); }
 }
 .code-line.bookmarked {
   background: rgba(240, 192, 74, 0.08);
-  box-shadow: inset 4px 0 0 #f0c04a;
 }
 
 /* Jump-to-bookmark button */
