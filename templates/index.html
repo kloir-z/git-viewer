@@ -681,11 +681,35 @@ async function showBlob(path) {
     applyBookmarkUi(blobView, bm);
   } else {
     const lang = LANG_MAP[fileExt] || 'plaintext';
-    const escaped = data.content.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    let highlighted;
+    try {
+      highlighted = hljs.highlight(data.content, {language: lang, ignoreIllegals: true}).value;
+    } catch {
+      highlighted = data.content.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+    const lines = splitHighlightedIntoLines(highlighted);
+    const gutterHtml = lines.map((_, i) =>
+      `<div class="code-line-num" data-bm-line="${i+1}">${i+1}</div>`
+    ).join('');
+    const bodyHtml = lines.map((line, i) =>
+      `<div class="code-line" data-bm-line="${i+1}">${line || ' '}</div>`
+    ).join('');
     blobView.innerHTML = `
-      <div class="section-header" style="margin-top:8px;">${esc(path)}<button class="btn-edit" onclick="editBlob('${esc(path)}')">編集</button></div>
-      <div class="blob-container"><pre class="blob-content"><code class="language-${lang}">${escaped}</code></pre></div>`;
-    blobView.querySelectorAll('pre code').forEach(block => hljs.highlightElement(block));
+      <div class="section-header" style="margin-top:8px;">${esc(path)}<span id="bm-jump-btn"></span><button class="btn-edit" onclick="editBlob('${esc(path)}')">編集</button></div>
+      <div class="blob-container">
+        <div class="code-wrapper">
+          <div class="code-gutter">${gutterHtml}</div>
+          <pre class="code-body"><code class="language-${lang} hljs">${bodyHtml}</code></pre>
+        </div>
+      </div>`;
+    blobView.querySelectorAll('.code-gutter .code-line-num').forEach(el => {
+      el.addEventListener('click', () => {
+        const line = Number(el.getAttribute('data-bm-line'));
+        onBookmarkClick(path, 'text', line);
+      });
+    });
+    const bm = await fetchBookmark(path);
+    applyBookmarkUi(blobView, bm);
   }
 }
 
