@@ -437,7 +437,7 @@ button:hover { background: var(--border); }
 .bm-target:hover::before {
   content: "📑";
   position: absolute;
-  left: -22px;
+  left: -16px;
   top: 0;
   opacity: 0.35;
   font-size: 12px;
