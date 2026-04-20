@@ -433,24 +433,11 @@ button:hover { background: var(--border); }
 .fav-star:not(.active) { color: var(--text-dim); }
 
 /* Bookmark (read marker) */
-.bm-target { position: relative; cursor: pointer; touch-action: manipulation; }
-.bm-target:hover::before {
-  content: "📑";
-  position: absolute;
-  left: -16px;
-  top: 0;
-  opacity: 0.35;
-  font-size: 12px;
-  pointer-events: none;
-}
+.bm-target { cursor: pointer; touch-action: manipulation; }
 .markdown-body > .bookmarked {
   border-left: 4px solid #f0c04a;
   padding-left: 8px;
   background: rgba(240, 192, 74, 0.08);
-}
-.markdown-body > .bookmarked::before {
-  content: "📑";
-  opacity: 1;
 }
 
 /* Code preview with line gutter */
