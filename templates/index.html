@@ -477,6 +477,121 @@ const LANG_MAP = {
   '.vue':'html', '.svelte':'html',
 };
 
+// --- Bookmark helpers ---
+async function fetchBookmark(path) {
+  try {
+    const r = await fetch(`/api/bookmark?repo=${encodeURIComponent(currentRepo)}&path=${encodeURIComponent(path)}`);
+    if (!r.ok) return {};
+    return await r.json();
+  } catch {
+    return {};
+  }
+}
+
+async function setBookmark(path, type, index) {
+  try {
+    await fetch('/api/bookmark', {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({repo: currentRepo, path, type, index}),
+    });
+  } catch {}
+}
+
+async function deleteBookmark(path) {
+  try {
+    await fetch('/api/bookmark', {
+      method: 'DELETE',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({repo: currentRepo, path}),
+    });
+  } catch {}
+}
+
+function splitHighlightedIntoLines(html) {
+  const lines = [];
+  let openTags = [];
+  let currentLine = '';
+  let i = 0;
+  while (i < html.length) {
+    const ch = html[i];
+    if (ch === '<') {
+      const end = html.indexOf('>', i);
+      if (end < 0) { currentLine += html.slice(i); break; }
+      const tag = html.slice(i, end + 1);
+      currentLine += tag;
+      if (tag.startsWith('</')) openTags.pop();
+      else if (!tag.endsWith('/>')) openTags.push(tag);
+      i = end + 1;
+    } else if (ch === '\n') {
+      currentLine += '</span>'.repeat(openTags.length);
+      lines.push(currentLine);
+      currentLine = openTags.join('');
+      i++;
+    } else {
+      currentLine += ch;
+      i++;
+    }
+  }
+  lines.push(currentLine);
+  return lines;
+}
+
+function bookmarkTarget(blobView, type, index) {
+  if (type === 'md') {
+    return blobView.querySelector(`[data-bm-idx="${index}"]`);
+  }
+  return blobView.querySelector(`.code-line[data-bm-line="${index}"]`);
+}
+
+function applyBookmarkUi(blobView, bm) {
+  blobView.querySelectorAll('.bookmarked').forEach(el => el.classList.remove('bookmarked'));
+  const jumpBtn = blobView.querySelector('#bm-jump-btn');
+  if (!bm || !bm.type) {
+    delete blobView.dataset.bmIdx;
+    delete blobView.dataset.bmType;
+    if (jumpBtn) jumpBtn.innerHTML = '';
+    return;
+  }
+  blobView.dataset.bmIdx = String(bm.index);
+  blobView.dataset.bmType = bm.type;
+  const target = bookmarkTarget(blobView, bm.type, bm.index);
+  if (target) {
+    target.classList.add('bookmarked');
+    if (bm.type === 'text') {
+      const gutter = blobView.querySelector(`.code-line-num[data-bm-line="${bm.index}"]`);
+      if (gutter) gutter.classList.add('bookmarked');
+    }
+  }
+  if (jumpBtn) {
+    jumpBtn.innerHTML = `<button class="btn-jump" onclick="jumpToBookmark()" title="しおりへ">📑</button>`;
+  }
+}
+
+async function onBookmarkClick(path, type, index) {
+  const blobView = document.getElementById('blob-view');
+  if (!blobView) return;
+  const sameType = blobView.dataset.bmType === type;
+  const sameIdx = blobView.dataset.bmIdx === String(index);
+  if (sameType && sameIdx) {
+    await deleteBookmark(path);
+    applyBookmarkUi(blobView, {});
+  } else {
+    await setBookmark(path, type, index);
+    applyBookmarkUi(blobView, {type, index});
+  }
+}
+
+function jumpToBookmark() {
+  const blobView = document.getElementById('blob-view');
+  if (!blobView) return;
+  const idx = blobView.dataset.bmIdx;
+  const type = blobView.dataset.bmType;
+  if (idx === undefined || !type) return;
+  const target = bookmarkTarget(blobView, type, Number(idx));
+  if (target) target.scrollIntoView({block: 'center'});
+}
+
 async function showBlob(path) {
   const blobView = document.getElementById('blob-view');
   if (!blobView) return;
