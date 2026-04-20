@@ -430,6 +430,36 @@ function parentPath(path) {
   return i > 0 ? path.substring(0, i) : '';
 }
 
+function resolveMdAssetUrl(url, baseDir) {
+  if (!url) return url;
+  if (/^(https?:)?\/\//i.test(url) || /^data:/i.test(url) || /^(mailto|tel|javascript):/i.test(url) || url.startsWith('#')) {
+    return url;
+  }
+  const hashIdx = url.search(/[?#]/);
+  const rawPath = hashIdx >= 0 ? url.slice(0, hashIdx) : url;
+  let target = rawPath.startsWith('/') ? rawPath.slice(1) : (baseDir ? baseDir + '/' + rawPath : rawPath);
+  const parts = [];
+  for (const seg of target.split('/')) {
+    if (seg === '' || seg === '.') continue;
+    if (seg === '..') { parts.pop(); continue; }
+    parts.push(seg);
+  }
+  const normalized = parts.join('/');
+  if (!normalized) return url;
+  return `/api/blob?repo=${encodeURIComponent(currentRepo)}&path=${encodeURIComponent(normalized)}`;
+}
+
+function rewriteMdAssets(container, baseDir) {
+  container.querySelectorAll('img').forEach(img => {
+    const src = img.getAttribute('src');
+    if (src) img.setAttribute('src', resolveMdAssetUrl(src, baseDir));
+  });
+  container.querySelectorAll('source, video, audio').forEach(el => {
+    const src = el.getAttribute('src');
+    if (src) el.setAttribute('src', resolveMdAssetUrl(src, baseDir));
+  });
+}
+
 const IMAGE_EXTS = ['jpg','jpeg','png','gif','svg','webp','ico'];
 const PDF_EXTS = ['pdf'];
 const TEXT_EXTS = [
@@ -519,7 +549,10 @@ async function showBlob(path) {
           <option value="sepia"${theme==='sepia'?' selected':''}>セピア</option>
         </select></label>
       </div>
-      <div class="blob-container markdown-body${themeClass}" id="md-body" style="padding:12px;--md-font-size:${fontSize}px;--md-spacing:${spacing}px;">${marked.parse(data.content)}</div>`;
+      <div class="blob-container markdown-body${themeClass}" id="md-body" style="padding:12px;--md-font-size:${fontSize}px;--md-spacing:${spacing}px;"></div>`;
+    const mdBody = blobView.querySelector('#md-body');
+    mdBody.innerHTML = marked.parse(data.content);
+    rewriteMdAssets(mdBody, parentPath(path));
     blobView.querySelectorAll('pre code').forEach(block => hljs.highlightElement(block));
   } else {
     const lang = LANG_MAP[fileExt] || 'plaintext';
