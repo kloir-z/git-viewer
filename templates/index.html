@@ -920,6 +920,28 @@ function esc(s) {
   return d.innerHTML;
 }
 
+// iOS Safari 等で touch による dblclick が発火しない/ズームが優先される問題の回避。
+// ブックマーク対象要素上の 400ms 以内の 2 回タップを合成 dblclick として発火する。
+(function setupMobileDoubleTap() {
+  const SELECTOR = '.bm-target, .code-line, .code-line-num';
+  const IGNORE = 'a, button, input, select, textarea, img';
+  document.addEventListener('touchend', (e) => {
+    if (e.changedTouches.length !== 1) return;
+    if (e.target.closest(IGNORE)) return;
+    const target = e.target.closest(SELECTOR);
+    if (!target) return;
+    const now = Date.now();
+    const last = Number(target.dataset.lastTap || 0);
+    if (now - last < 400) {
+      e.preventDefault();
+      target.dispatchEvent(new MouseEvent('dblclick', {bubbles: true, cancelable: true}));
+      target.dataset.lastTap = '0';
+    } else {
+      target.dataset.lastTap = String(now);
+    }
+  }, {passive: false});
+})();
+
 init();
 </script>
 
