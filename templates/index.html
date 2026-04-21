@@ -478,6 +478,58 @@ const LANG_MAP = {
   '.vue':'html', '.svelte':'html',
 };
 
+function parseSrt(text) {
+  const cleaned = text.replace(/^﻿/, '').replace(/\r\n/g, '\n');
+  const blocks = cleaned.split(/\n\s*\n+/);
+  const timeRe = /(\d+:\d+:\d+[,.]\d+)\s*-->\s*(\d+:\d+:\d+[,.]\d+)/;
+  const speakerRe = /^([^\s:：]{1,16})[:：]\s*/;
+  const cues = [];
+  for (const block of blocks) {
+    const raw = block.split('\n');
+    let s = 0, e = raw.length;
+    while (s < e && raw[s].trim() === '') s++;
+    while (e > s && raw[e - 1].trim() === '') e--;
+    const lines = raw.slice(s, e);
+    if (lines.length === 0) continue;
+
+    let i = 0;
+    let index = '';
+    if (/^\d+$/.test(lines[i].trim())) {
+      index = lines[i].trim();
+      i++;
+    }
+    let start = '', end = '';
+    if (i < lines.length) {
+      const m = lines[i].match(timeRe);
+      if (m) {
+        start = m[1];
+        end = m[2];
+        i++;
+      }
+    }
+    const textLines = lines.slice(i);
+    if (textLines.length === 0 && !index && !start) continue;
+    let body = textLines.join('\n');
+    let speaker = '';
+    const spk = body.match(speakerRe);
+    if (spk) {
+      speaker = spk[1];
+      body = body.slice(spk[0].length);
+    }
+    cues.push({index, start, end, speaker, text: body});
+  }
+  return cues;
+}
+
+function speakerColor(name) {
+  if (!name) return '';
+  let h = 0;
+  for (let i = 0; i < name.length; i++) {
+    h = (h * 31 + name.charCodeAt(i)) >>> 0;
+  }
+  return `hsl(${h % 360}, 55%, 60%)`;
+}
+
 // --- Bookmark helpers ---
 async function fetchBookmark(path) {
   try {
