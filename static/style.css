@@ -425,7 +425,7 @@ button:hover { background: var(--border); }
 
 /* Bookmark (read marker) */
 .bm-target { cursor: pointer; touch-action: manipulation; }
-.markdown-body > .bookmarked {
+.markdown-body .bookmarked {
   border-left: 4px solid #f0c04a;
   padding-left: 8px;
   background: rgba(240, 192, 74, 0.08);

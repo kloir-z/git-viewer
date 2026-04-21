@@ -742,7 +742,16 @@ async function showBlob(path) {
     mdBody.innerHTML = marked.parse(data.content);
     rewriteMdAssets(mdBody, parentPath(path));
     blobView.querySelectorAll('pre code').forEach(block => hljs.highlightElement(block));
-    Array.from(mdBody.children).forEach((el, idx) => {
+    // UL/OL は中の LI を個別のしおり対象に展開（大きなリスト全体が 1 つのしおりになるのを避ける）
+    const targets = [];
+    for (const child of mdBody.children) {
+      if (child.tagName === 'UL' || child.tagName === 'OL') {
+        for (const li of child.children) targets.push(li);
+      } else {
+        targets.push(child);
+      }
+    }
+    targets.forEach((el, idx) => {
       el.setAttribute('data-bm-idx', String(idx));
       el.classList.add('bm-target');
       el.addEventListener('dblclick', (e) => {
