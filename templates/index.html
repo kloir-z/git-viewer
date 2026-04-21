@@ -797,21 +797,16 @@ async function showBlob(path) {
       highlighted = data.content.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     }
     const lines = splitHighlightedIntoLines(highlighted);
-    const gutterHtml = lines.map((_, i) =>
-      `<div class="code-line-num" data-bm-line="${i+1}">${i+1}</div>`
-    ).join('');
-    const bodyHtml = lines.map((line, i) =>
+    const rowsHtml = lines.map((line, i) =>
+      `<div class="code-line-num" data-bm-line="${i+1}">${i+1}</div>` +
       `<div class="code-line" data-bm-line="${i+1}">${line || ' '}</div>`
     ).join('');
     blobView.innerHTML = `
       <div class="section-header" style="margin-top:8px;">${esc(path)}<span id="bm-jump-btn"></span><button class="btn-edit" onclick="editBlob('${esc(path)}')">編集</button></div>
       <div class="blob-container">
-        <div class="code-wrapper">
-          <div class="code-gutter">${gutterHtml}</div>
-          <pre class="code-body"><code class="language-${lang} hljs">${bodyHtml}</code></pre>
-        </div>
+        <div class="code-wrapper hljs language-${lang}">${rowsHtml}</div>
       </div>`;
-    blobView.querySelectorAll('.code-gutter .code-line-num, .code-body .code-line').forEach(el => {
+    blobView.querySelectorAll('.code-line-num, .code-line').forEach(el => {
       el.addEventListener('dblclick', () => {
         const line = Number(el.getAttribute('data-bm-line'));
         onBookmarkClick(path, 'text', line);
