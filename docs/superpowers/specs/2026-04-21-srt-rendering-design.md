@@ -91,7 +91,7 @@ JS 側の `TEXT_EXTS` 配列にも `'srt'` を追加。これを忘れると `sh
 追加するクラス:
 
 - `.srt-container` — 縦にカードを並べる。`display: flex; flex-direction: column; gap: 8px; padding: 8px`
-- `.srt-cue` — 背景 `--bg-secondary`、左ボーダー `4px solid var(--speaker-color, var(--border))`、角丸、`padding: 8px 12px`
+- `.srt-cue` — 背景 `var(--surface)`、左ボーダー `4px solid var(--speaker-color, var(--border))`、角丸、`padding: 8px 12px`
 - `.srt-meta` — 横並び。番号・時刻は等幅＋muted 色。話者バッジは `--speaker-color` 背景で白文字
 - `.srt-index` — `color: var(--text-muted); font-family: monospace; font-size: 11px`
 - `.srt-time` — `color: var(--text-muted); font-family: monospace; font-size: 11px`
