@@ -484,3 +484,45 @@ button:hover { background: var(--border); }
   font-size: 11px;
 }
 .btn-jump:hover { background: var(--accent); color: #fff; }
+
+/* SRT subtitle cards */
+.srt-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+}
+.srt-cue {
+  background: var(--surface);
+  border-left: 4px solid var(--speaker-color, var(--border));
+  border-radius: 4px;
+  padding: 8px 12px;
+}
+.srt-meta {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.srt-index,
+.srt-time {
+  color: var(--text-muted);
+  font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+  font-size: 11px;
+}
+.srt-speaker {
+  background: var(--speaker-color);
+  color: #fff;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.srt-text {
+  white-space: pre-wrap;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text);
+}

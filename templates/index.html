@@ -750,6 +750,42 @@ async function showBlob(path) {
     });
     const bm = await fetchBookmark(path);
     applyBookmarkUi(blobView, bm);
+  } else if (fileExt === '.srt') {
+    const cues = parseSrt(data.content);
+    if (cues.length === 0) {
+      blobView.innerHTML = `
+        <div class="section-header" style="margin-top:8px;">${esc(path)}<button class="btn-edit" onclick="editBlob('${esc(path)}')">編集</button></div>
+        <div class="diff-empty">字幕を読み込めませんでした</div>
+        <pre class="blob-container" style="padding:8px;white-space:pre-wrap;">${esc(data.content)}</pre>`;
+      return;
+    }
+    const cardsHtml = cues.map((c, i) => {
+      const color = speakerColor(c.speaker);
+      const styleAttr = color ? ` style="--speaker-color: ${color};"` : '';
+      const speakerBadge = c.speaker ? `<span class="srt-speaker">${esc(c.speaker)}</span>` : '';
+      const timeStr = (c.start && c.end) ? `${c.start} → ${c.end}` : '--';
+      const idxStr = c.index || '';
+      return `
+        <div class="srt-cue bm-target" data-bm-idx="${i}"${styleAttr}>
+          <div class="srt-meta">
+            <span class="srt-index">${esc(idxStr)}</span>
+            <span class="srt-time">${esc(timeStr)}</span>
+            ${speakerBadge}
+          </div>
+          <div class="srt-text">${esc(c.text)}</div>
+        </div>`;
+    }).join('');
+    blobView.innerHTML = `
+      <div class="section-header" style="margin-top:8px;">${esc(path)}<span id="bm-jump-btn"></span><button class="btn-edit" onclick="editBlob('${esc(path)}')">編集</button></div>
+      <div class="blob-container srt-container">${cardsHtml}</div>`;
+    blobView.querySelectorAll('.srt-cue').forEach((el, idx) => {
+      el.addEventListener('dblclick', (e) => {
+        if (e.target.closest('a, button, input, select, textarea, img')) return;
+        onBookmarkClick(path, 'md', idx);
+      });
+    });
+    const bm = await fetchBookmark(path);
+    applyBookmarkUi(blobView, bm);
   } else {
     const lang = LANG_MAP[fileExt] || 'plaintext';
     let highlighted;
