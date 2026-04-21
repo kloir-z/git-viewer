@@ -7,7 +7,7 @@ Read-only web UI for browsing git repositories. Built for Raspberry Pi but works
 - **Overview** -- branch, changes, remote status, recent commits at a glance
 - **Log** -- commit history with inline diff expansion (line-by-line / side-by-side toggle)
 - **Diff** -- uncommitted changes with word-level highlighting (diff2html)
-- **Files** -- working tree browser with syntax highlighting (highlight.js), Markdown rendering (marked.js), image/PDF preview
+- **Files** -- working tree browser with syntax highlighting (highlight.js), Markdown rendering (marked.js), image/PDF/audio preview, SRT subtitle rendering (speaker-colored cue cards)
 
 ## Setup
 
