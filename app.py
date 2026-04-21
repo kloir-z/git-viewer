@@ -344,7 +344,7 @@ TEXT_EXTS = {
     '.xml', '.html', '.css', '.toml', '.md', '.txt', '.cfg', '.ini', '.conf',
     '.env', '.service', '.timer', '.csv', '.sql', '.rb', '.go', '.rs', '.java',
     '.c', '.h', '.cpp', '.hpp', '.vue', '.svelte', '.gitignore', '.dockerignore',
-    '.dockerfile', '.makefile', '',
+    '.dockerfile', '.makefile', '.srt', '',
 }
 IMAGE_EXTS = {'.jpg', '.jpeg', '.png', '.gif', '.svg', '.webp', '.ico'}
 PDF_EXTS = {'.pdf'}
