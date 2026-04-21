@@ -462,6 +462,7 @@ function rewriteMdAssets(container, baseDir) {
 
 const IMAGE_EXTS = ['jpg','jpeg','png','gif','svg','webp','ico'];
 const PDF_EXTS = ['pdf'];
+const AUDIO_EXTS = ['mp3','wav','ogg','m4a','flac','aac','opus','webm'];
 const TEXT_EXTS = [
   'py','js','ts','jsx','tsx','sh','bash','json','yml','yaml','xml','html','css',
   'toml','md','txt','cfg','ini','conf','env','service','timer','csv','sql',
@@ -610,7 +611,7 @@ async function showBlob(path) {
   const fileName = path.split('/').pop();
 
   // Binary files — show download link only
-  if (!IMAGE_EXTS.includes(ext) && !PDF_EXTS.includes(ext) && !TEXT_EXTS.includes(ext) && ext !== '') {
+  if (!IMAGE_EXTS.includes(ext) && !PDF_EXTS.includes(ext) && !AUDIO_EXTS.includes(ext) && !TEXT_EXTS.includes(ext) && ext !== '') {
     blobView.innerHTML = `
       <div class="section-header" style="margin-top:8px;">${esc(path)}</div>
       <div class="diff-empty">バイナリファイル — <a href="${blobUrl}" download style="color:var(--accent);">ダウンロード</a></div>`;
@@ -623,6 +624,16 @@ async function showBlob(path) {
       <div class="section-header" style="margin-top:8px;">${esc(path)}</div>
       <div class="blob-container" style="text-align:center;padding:8px;">
         <img src="${blobUrl}" alt="${esc(fileName)}" style="max-width:100%;height:auto;">
+      </div>`;
+    return;
+  }
+
+  // Audio
+  if (AUDIO_EXTS.includes(ext)) {
+    blobView.innerHTML = `
+      <div class="section-header" style="margin-top:8px;">${esc(path)}</div>
+      <div class="blob-container" style="padding:8px;">
+        <audio controls preload="metadata" src="${blobUrl}" style="width:100%;"></audio>
       </div>`;
     return;
   }

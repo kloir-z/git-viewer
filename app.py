@@ -368,17 +368,17 @@ def blob():
     filename = path.replace("\\", "/").rsplit("/", 1)[-1]
     ext = ('.' + filename.rsplit('.', 1)[1]).lower() if '.' in filename else ''
 
-    # Binary files (images, PDFs): return raw bytes
-    if ext in IMAGE_EXTS or ext in PDF_EXTS:
-        mime = mimetypes.guess_type(path)[0] or 'application/octet-stream'
-        return send_file(file_full, mimetype=mime, download_name=path.rsplit('/', 1)[-1])
-
     # Text files: return JSON with content and ext
-    try:
-        content = file_full.read_text(encoding="utf-8", errors="replace")
-    except Exception:
-        abort(500)
-    return jsonify({"content": content, "path": path, "ext": ext})
+    if ext in TEXT_EXTS:
+        try:
+            content = file_full.read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            abort(500)
+        return jsonify({"content": content, "path": path, "ext": ext})
+
+    # Binary files (images, PDFs, audio, office docs, archives, etc.): return raw bytes
+    mime = mimetypes.guess_type(path)[0] or 'application/octet-stream'
+    return send_file(file_full, mimetype=mime, download_name=path.rsplit('/', 1)[-1])
 
 
 @app.route("/api/blob", methods=["PUT"])
