@@ -425,10 +425,17 @@ button:hover { background: var(--border); }
 
 /* Bookmark (read marker) */
 .bm-target { cursor: pointer; touch-action: manipulation; }
-.markdown-body .bookmarked {
+/* ブロック単位（見出し・コードブロック）の従来表示 */
+.markdown-body :not(span).bookmarked {
   border-left: 4px solid #f0c04a;
   padding-left: 8px;
   background: rgba(240, 192, 74, 0.08);
+}
+/* インライン文単位の表示 */
+.markdown-body span.bookmarked {
+  background: rgba(240, 192, 74, 0.25);
+  border-radius: 2px;
+  box-shadow: 0 0 0 2px rgba(240, 192, 74, 0.25);
 }
 
 /* Code preview with line gutter — grid で行ごとに gutter/body セルを揃える */

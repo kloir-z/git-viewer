@@ -598,6 +598,131 @@ function splitHighlightedIntoLines(html) {
   return lines;
 }
 
+// ----- Markdown 文単位しおり -----
+
+// 句点判定: 全角は常に文末。半角 . ! ? は後続が空白/末尾なら文末。
+const MD_SENT_END = /[。！？]|[.!?](?=\s|$)/g;
+
+// 文単位に分割しないコンテナ（中身を再帰)
+const MD_CONTAINER_TAGS = new Set(['UL','OL','BLOCKQUOTE','TABLE','THEAD','TBODY','TR']);
+// 1 単位のままで data-bm-idx を付ける（中身は再帰しない）
+const MD_ATOMIC_TAGS = new Set(['H1','H2','H3','H4','H5','H6','PRE']);
+// 文単位に分割する
+const MD_SPLIT_TAGS = new Set(['P','LI','TH','TD']);
+
+function isBlockChild(node) {
+  if (node.nodeType !== 1) return false;
+  const t = node.tagName;
+  return MD_CONTAINER_TAGS.has(t) || MD_ATOMIC_TAGS.has(t) || MD_SPLIT_TAGS.has(t);
+}
+
+// テキストノード列内で文末位置を見つけ、文ごとに span でラップする。
+function wrapInlineRunIntoSentences(parent, nodes, ctx) {
+  const flushAfter = new Set();
+
+  for (let i = 0; i < nodes.length; i++) {
+    const n = nodes[i];
+    if (n.nodeType !== 3) continue;
+    // text は分割前の元の nodeValue を保持し続ける。offsetBase が「どれだけ前に切り出したか」を追う
+    let text = n.nodeValue;
+    let offsetBase = 0;
+    let cur = n;
+    MD_SENT_END.lastIndex = 0;
+    let m;
+    while ((m = MD_SENT_END.exec(text)) !== null) {
+      const cut = m.index + m[0].length - offsetBase;
+      if (cut < cur.nodeValue.length) {
+        const tail = cur.splitText(cut);
+        flushAfter.add(cur);
+        nodes.splice(i + 1, 0, tail);
+        offsetBase = m.index + m[0].length;
+        cur = tail;
+      } else {
+        flushAfter.add(cur);
+      }
+    }
+  }
+
+  const spans = [];
+  let bucket = [];
+  for (const n of nodes) {
+    bucket.push(n);
+    if (n.nodeType === 3 && flushAfter.has(n)) {
+      spans.push(bucket);
+      bucket = [];
+    }
+  }
+  if (bucket.length > 0) spans.push(bucket);
+
+  // 空白だけのグループは前にマージ
+  const merged = [];
+  for (const group of spans) {
+    const onlyWs = group.every(n => n.nodeType === 3 && /^\s*$/.test(n.nodeValue));
+    if (onlyWs && merged.length > 0) {
+      merged[merged.length - 1].push(...group);
+    } else {
+      merged.push(group);
+    }
+  }
+
+  const firstAnchor = nodes[0];
+  if (!firstAnchor) return;
+  for (const group of merged) {
+    const span = document.createElement('span');
+    span.className = 'bm-target';
+    span.setAttribute('data-bm-idx', String(ctx.counter++));
+    parent.insertBefore(span, group[0]);
+    for (const n of group) span.appendChild(n);
+  }
+}
+
+function markAtomic(el, ctx) {
+  el.setAttribute('data-bm-idx', String(ctx.counter++));
+  el.classList.add('bm-target');
+}
+
+function splitElementIntoSentences(parent, ctx) {
+  const children = [...parent.childNodes];
+  let inlineRun = [];
+  for (const child of children) {
+    if (isBlockChild(child)) {
+      if (inlineRun.length > 0) {
+        wrapInlineRunIntoSentences(parent, inlineRun, ctx);
+        inlineRun = [];
+      }
+      processMdBlock(child, ctx);
+    } else {
+      inlineRun.push(child);
+    }
+  }
+  if (inlineRun.length > 0) {
+    wrapInlineRunIntoSentences(parent, inlineRun, ctx);
+  }
+}
+
+function processMdBlock(node, ctx) {
+  if (node.nodeType !== 1) return;
+  const tag = node.tagName;
+  if (MD_CONTAINER_TAGS.has(tag)) {
+    for (const child of [...node.children]) processMdBlock(child, ctx);
+    return;
+  }
+  if (MD_ATOMIC_TAGS.has(tag)) {
+    markAtomic(node, ctx);
+    return;
+  }
+  if (MD_SPLIT_TAGS.has(tag)) {
+    splitElementIntoSentences(node, ctx);
+    return;
+  }
+}
+
+function splitMdIntoSentences(root) {
+  const ctx = { counter: 0 };
+  for (const child of [...root.children]) processMdBlock(child, ctx);
+  return ctx.counter;
+}
+
 function bookmarkTarget(blobView, type, index) {
   if (type === 'md') {
     return blobView.querySelector(`[data-bm-idx="${index}"]`);
@@ -742,18 +867,10 @@ async function showBlob(path) {
     mdBody.innerHTML = marked.parse(data.content);
     rewriteMdAssets(mdBody, parentPath(path));
     blobView.querySelectorAll('pre code').forEach(block => hljs.highlightElement(block));
-    // UL/OL は中の LI を個別のしおり対象に展開（大きなリスト全体が 1 つのしおりになるのを避ける）
-    const targets = [];
-    for (const child of mdBody.children) {
-      if (child.tagName === 'UL' || child.tagName === 'OL') {
-        for (const li of child.children) targets.push(li);
-      } else {
-        targets.push(child);
-      }
-    }
-    targets.forEach((el, idx) => {
-      el.setAttribute('data-bm-idx', String(idx));
-      el.classList.add('bm-target');
+    // 文単位 / 見出し単位 / コードブロック単位で data-bm-idx を付与
+    splitMdIntoSentences(mdBody);
+    mdBody.querySelectorAll('[data-bm-idx]').forEach(el => {
+      const idx = Number(el.getAttribute('data-bm-idx'));
       el.addEventListener('dblclick', (e) => {
         if (e.target.closest('a, button, input, select, textarea, img')) return;
         onBookmarkClick(path, 'md', idx);
