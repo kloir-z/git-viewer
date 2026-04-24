@@ -612,6 +612,7 @@ button:hover { background: var(--border); }
   padding: 8px 0;
 }
 .srt-embed-container .srt-cue {
+  cursor: pointer;
   transition: background-color 120ms, border-left-color 120ms, box-shadow 120ms;
 }
 .srt-embed-container .srt-cue.current {

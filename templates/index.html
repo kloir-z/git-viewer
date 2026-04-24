@@ -645,6 +645,15 @@ function setupSrtSync(audio, container, cues) {
 
   audio.addEventListener('timeupdate', update);
   audio.addEventListener('seeked', () => { resumeFollow(); update(); });
+
+  cueEls.forEach((el, idx) => {
+    el.addEventListener('dblclick', () => {
+      const sec = cues[idx].startSec;
+      if (!Number.isFinite(sec)) return;
+      audio.currentTime = sec;
+      audio.play().catch(() => {});
+    });
+  });
 }
 
 // --- Bookmark helpers ---
@@ -1265,7 +1274,7 @@ function setupPlaybackLog(audioPath) {
 // iOS Safari 等で touch による dblclick が発火しない/ズームが優先される問題の回避。
 // ブックマーク対象要素上の 400ms 以内の 2 回タップを合成 dblclick として発火する。
 (function setupMobileDoubleTap() {
-  const SELECTOR = '.bm-target, .code-line, .code-line-num';
+  const SELECTOR = '.bm-target, .code-line, .code-line-num, .srt-embed-container .srt-cue';
   const IGNORE = 'a, button, input, select, textarea, img';
   document.addEventListener('touchend', (e) => {
     if (e.changedTouches.length !== 1) return;
