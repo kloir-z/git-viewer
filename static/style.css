@@ -3,6 +3,7 @@
 :root {
   --bg: #0d1117;
   --surface: #161b22;
+  --surface-hover: #21262d;
   --border: #30363d;
   --text: #c9d1d9;
   --text-muted: #8b949e;
@@ -593,7 +594,7 @@ button:hover { background: var(--border); }
   padding: 8px 0;
 }
 .srt-embed-container .srt-cue {
-  transition: background-color 120ms, border-left-color 120ms;
+  transition: background-color 120ms, border-left-color 120ms, box-shadow 120ms;
 }
 .srt-embed-container .srt-cue.current {
   background: var(--surface-hover, rgba(255,255,255,0.06));
