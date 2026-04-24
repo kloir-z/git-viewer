@@ -546,17 +546,17 @@ async function loadSiblingSrt(audioPath) {
   const stem = base.replace(/\.[^./]+$/, '');
   const candidates = [dir + stem + '.srt', dir + base + '.srt'];
   for (const p of candidates) {
-    try {
-      const data = await fetchJson(
-        `/api/blob?repo=${encodeURIComponent(currentRepo)}&path=${encodeURIComponent(p)}`
-      );
-      if (data && typeof data.content === 'string') return { path: p, text: data.content };
-    } catch (_) { /* 404 等は次の候補へ */ }
+    const data = await fetchJson(
+      `/api/blob?repo=${encodeURIComponent(currentRepo)}&path=${encodeURIComponent(p)}`
+    );
+    if (data && typeof data.content === 'string') return { path: p, text: data.content };
   }
   return null;
 }
 
 async function setupSrtEmbed(audioPath) {
+  // Capture DOM refs *before* the await below: on rapid file-switch the late
+  // resolution lands on the detached old #srt-embed and the write is GC'd.
   const container = document.getElementById('srt-embed');
   const audio = document.getElementById('audio-player');
   if (!container || !audio) return;
@@ -636,6 +636,8 @@ function setupSrtSync(audio, container, cues) {
     if (!el) return;
     el.classList.add('current');
     if (followEnabled) {
+      // Suppress scroll events fired by smooth scrollIntoView so the manual-
+      // scroll handler does not misread them as user input and pause follow.
       programmaticScrollUntil = performance.now() + 800;
       el.scrollIntoView({ block: 'center', behavior: 'smooth' });
     }
