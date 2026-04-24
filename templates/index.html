@@ -532,6 +532,66 @@ function speakerColor(name) {
   return `hsl(${h % 360}, 55%, 60%)`;
 }
 
+function timeToSeconds(tc) {
+  if (!tc) return NaN;
+  const m = tc.match(/^(\d+):(\d+):(\d+)[,.](\d+)$/);
+  if (!m) return NaN;
+  return (+m[1]) * 3600 + (+m[2]) * 60 + (+m[3]) + (+m[4]) / Math.pow(10, m[4].length);
+}
+
+async function loadSiblingSrt(audioPath) {
+  const slash = audioPath.lastIndexOf('/');
+  const dir = slash >= 0 ? audioPath.slice(0, slash + 1) : '';
+  const base = slash >= 0 ? audioPath.slice(slash + 1) : audioPath;
+  const stem = base.replace(/\.[^./]+$/, '');
+  const candidates = [dir + stem + '.srt', dir + base + '.srt'];
+  for (const p of candidates) {
+    try {
+      const data = await fetchJson(
+        `/api/blob?repo=${encodeURIComponent(currentRepo)}&path=${encodeURIComponent(p)}`
+      );
+      if (data && typeof data.content === 'string') return { path: p, text: data.content };
+    } catch (_) { /* 404 等は次の候補へ */ }
+  }
+  return null;
+}
+
+async function setupSrtEmbed(audioPath) {
+  const container = document.getElementById('srt-embed');
+  const audio = document.getElementById('audio-player');
+  if (!container || !audio) return;
+
+  const result = await loadSiblingSrt(audioPath);
+  if (!result) return;
+
+  const parsed = parseSrt(result.text);
+  if (parsed.length === 0) {
+    container.innerHTML = `<div class="srt-embed-empty">字幕を読み込めませんでした</div>`;
+    return;
+  }
+  const cues = parsed.map(c => ({
+    ...c,
+    startSec: timeToSeconds(c.start),
+    endSec: timeToSeconds(c.end),
+  }));
+
+  const cardsHtml = cues.map(c => {
+    const color = speakerColor(c.speaker);
+    const styleAttr = color ? ` style="--speaker-color: ${color};"` : '';
+    const speakerBadge = c.speaker ? `<span class="srt-speaker">${esc(c.speaker)}</span>` : '';
+    const timeStr = (c.start && c.end) ? `${esc(c.start)} → ${esc(c.end)}` : '--';
+    return `<div class="srt-cue" data-start="${c.startSec}" data-end="${c.endSec}"${styleAttr}>
+      <div class="srt-meta"><span class="srt-time">${timeStr}</span>${speakerBadge}</div>
+      <div class="srt-text">${esc(c.text)}</div>
+    </div>`;
+  }).join('');
+
+  const srtName = result.path.split('/').pop();
+  container.innerHTML = `<div class="srt-embed-header">字幕 (<span class="srt-embed-filename">${esc(srtName)}</span>)</div>${cardsHtml}`;
+
+  // 同期ロジックは Task 3 で追加
+}
+
 // --- Bookmark helpers ---
 async function fetchBookmark(path) {
   try {
@@ -817,6 +877,7 @@ async function showBlob(path) {
         <div id="srt-embed" class="srt-embed-container"></div>
       </div>`;
     setupPlaybackLog(path);
+    setupSrtEmbed(path);
     return;
   }
 
