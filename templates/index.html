@@ -814,6 +814,7 @@ async function showBlob(path) {
       <div class="blob-container" style="padding:8px;">
         <audio id="audio-player" controls preload="metadata" src="${blobUrl}" style="width:100%;"></audio>
         <div id="playback-log-list" class="playback-log"></div>
+        <div id="srt-embed" class="srt-embed-container"></div>
       </div>`;
     setupPlaybackLog(path);
     return;
