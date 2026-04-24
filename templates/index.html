@@ -589,7 +589,60 @@ async function setupSrtEmbed(audioPath) {
   const srtName = result.path.split('/').pop();
   container.innerHTML = `<div class="srt-embed-header">字幕 (<span class="srt-embed-filename">${esc(srtName)}</span>)</div>${cardsHtml}`;
 
-  // 同期ロジックは Task 3 で追加
+  setupSrtSync(audio, container, cues);
+}
+
+function setupSrtSync(audio, container, cues) {
+  const cueEls = container.querySelectorAll('.srt-cue');
+  let currentIdx = -1;
+  let followEnabled = true;
+  let programmaticScrollUntil = 0;
+  let manualPauseTimer = null;
+
+  const resumeFollow = () => {
+    followEnabled = true;
+    clearTimeout(manualPauseTimer);
+    manualPauseTimer = null;
+  };
+  const pauseFromManualScroll = () => {
+    followEnabled = false;
+    clearTimeout(manualPauseTimer);
+    manualPauseTimer = setTimeout(resumeFollow, 5000);
+  };
+
+  container.addEventListener('scroll', () => {
+    if (performance.now() < programmaticScrollUntil) return;
+    pauseFromManualScroll();
+  }, { passive: true });
+
+  const findIdx = (t) => {
+    if (currentIdx >= 0 && currentIdx < cues.length) {
+      const c = cues[currentIdx];
+      if (t >= c.startSec && t <= c.endSec) return currentIdx;
+    }
+    for (let i = 0; i < cues.length; i++) {
+      if (t >= cues[i].startSec && t <= cues[i].endSec) return i;
+    }
+    return -1;
+  };
+
+  const update = () => {
+    const idx = findIdx(audio.currentTime);
+    if (idx === currentIdx) return;
+    if (currentIdx >= 0 && cueEls[currentIdx]) cueEls[currentIdx].classList.remove('current');
+    currentIdx = idx;
+    if (idx < 0) return;
+    const el = cueEls[idx];
+    if (!el) return;
+    el.classList.add('current');
+    if (followEnabled) {
+      programmaticScrollUntil = performance.now() + 800;
+      el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
+  };
+
+  audio.addEventListener('timeupdate', update);
+  audio.addEventListener('seeked', () => { resumeFollow(); update(); });
 }
 
 // --- Bookmark helpers ---
