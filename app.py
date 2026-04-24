@@ -494,5 +494,67 @@ def bookmark_remove():
     return jsonify({"ok": True})
 
 
+PLAYBACK_MIN_SECONDS = 15
+
+
+def _playback_log_path(repo_path: Path, rel_path: str) -> Path:
+    if not rel_path or ".." in rel_path:
+        abort(400)
+    audio_full = (repo_path / rel_path).resolve()
+    if not str(audio_full).startswith(str(repo_path.resolve())):
+        abort(403)
+    if not audio_full.is_file():
+        abort(404)
+    return audio_full.parent / (audio_full.name + ".playback.jsonl")
+
+
+@app.route("/api/playback-log")
+def playback_log_list():
+    name = request.args.get("repo", "")
+    path = request.args.get("path", "")
+    repo_path = valid_repo(name)
+    log_file = _playback_log_path(repo_path, path)
+    if not log_file.is_file():
+        return jsonify([])
+    records = []
+    for line in log_file.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            records.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    return jsonify(records)
+
+
+@app.route("/api/playback-log", methods=["POST"])
+def playback_log_add():
+    data = request.get_json()
+    if not data:
+        abort(400)
+    name = data.get("repo", "")
+    path = data.get("path", "")
+    start_sec = data.get("start_sec")
+    end_sec = data.get("end_sec")
+    started_at = data.get("started_at", "")
+    ended_at = data.get("ended_at", "")
+    if not isinstance(start_sec, (int, float)) or not isinstance(end_sec, (int, float)):
+        abort(400)
+    if end_sec - start_sec < PLAYBACK_MIN_SECONDS:
+        return jsonify({"ok": True, "skipped": True})
+    repo_path = valid_repo(name)
+    log_file = _playback_log_path(repo_path, path)
+    record = {
+        "started_at": str(started_at),
+        "ended_at": str(ended_at),
+        "start_sec": round(float(start_sec), 2),
+        "end_sec": round(float(end_sec), 2),
+    }
+    with open(log_file, "a", encoding="utf-8") as f:
+        f.write(json.dumps(record, ensure_ascii=False) + "\n")
+    return jsonify({"ok": True})
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5125, debug=False)

@@ -532,3 +532,36 @@ button:hover { background: var(--border); }
   line-height: 1.5;
   color: var(--text);
 }
+
+.playback-log {
+  margin-top: 10px;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+.playback-log-header {
+  color: var(--text-muted);
+  font-size: 11px;
+  margin-bottom: 6px;
+}
+.playback-log-empty {
+  color: var(--text-dim);
+  font-size: 11px;
+}
+.playback-log-row {
+  display: flex;
+  gap: 12px;
+  padding: 2px 0;
+  font-size: 12px;
+}
+.playback-log-when {
+  color: var(--text-muted);
+  min-width: 140px;
+}
+.playback-log-range {
+  color: var(--accent);
+  cursor: pointer;
+  user-select: none;
+}
+.playback-log-range:hover {
+  text-decoration: underline;
+}

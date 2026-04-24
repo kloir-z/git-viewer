@@ -812,8 +812,10 @@ async function showBlob(path) {
     blobView.innerHTML = `
       <div class="section-header" style="margin-top:8px;">${esc(path)}</div>
       <div class="blob-container" style="padding:8px;">
-        <audio controls preload="metadata" src="${blobUrl}" style="width:100%;"></audio>
+        <audio id="audio-player" controls preload="metadata" src="${blobUrl}" style="width:100%;"></audio>
+        <div id="playback-log-list" class="playback-log"></div>
       </div>`;
+    setupPlaybackLog(path);
     return;
   }
 
@@ -1039,6 +1041,104 @@ function esc(s) {
   const d = document.createElement('div');
   d.textContent = s;
   return d.innerHTML;
+}
+
+const PLAYBACK_MIN_SECONDS = 15;
+
+function formatPlaybackTime(sec) {
+  sec = Math.max(0, Math.floor(sec));
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  const pad = n => n.toString().padStart(2, '0');
+  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
+}
+
+function formatPlaybackDate(iso) {
+  if (!iso) return '-';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '-';
+  const pad = n => n.toString().padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+async function refreshPlaybackLog(audioPath) {
+  const container = document.getElementById('playback-log-list');
+  if (!container) return;
+  const url = `/api/playback-log?repo=${encodeURIComponent(currentRepo)}&path=${encodeURIComponent(audioPath)}`;
+  try {
+    const records = await fetchJson(url);
+    if (!Array.isArray(records) || records.length === 0) {
+      container.innerHTML = '<div class="playback-log-header">再生履歴</div><div class="playback-log-empty">まだありません</div>';
+      return;
+    }
+    const rows = records.slice().reverse().map(r => {
+      const when = formatPlaybackDate(r.started_at);
+      const start = formatPlaybackTime(r.start_sec);
+      const end = formatPlaybackTime(r.end_sec);
+      const seekTo = Math.max(r.start_sec, r.end_sec - 10);
+      return `<div class="playback-log-row"><span class="playback-log-when">${esc(when)}</span><span class="playback-log-range" data-seek="${seekTo}">${start}〜${end}</span></div>`;
+    }).join('');
+    container.innerHTML = `<div class="playback-log-header">再生履歴 (${records.length})</div>${rows}`;
+    container.querySelectorAll('.playback-log-range').forEach(el => {
+      el.addEventListener('click', () => {
+        const audio = document.getElementById('audio-player');
+        if (!audio) return;
+        audio.currentTime = parseFloat(el.dataset.seek);
+        audio.play().catch(() => {});
+      });
+    });
+  } catch (e) {
+    container.innerHTML = '';
+  }
+}
+
+function setupPlaybackLog(audioPath) {
+  const audio = document.getElementById('audio-player');
+  if (!audio) return;
+
+  let segStart = null;
+  let segStartedAt = null;
+  let lastTime = 0;
+
+  const start = () => {
+    segStart = audio.currentTime;
+    segStartedAt = new Date().toISOString();
+    lastTime = audio.currentTime;
+  };
+
+  const finalize = () => {
+    if (segStart === null) return;
+    const startCopy = segStart;
+    const startedAtCopy = segStartedAt;
+    segStart = null;
+    segStartedAt = null;
+    const endSec = lastTime;
+    if (endSec - startCopy < PLAYBACK_MIN_SECONDS) return;
+    fetch('/api/playback-log', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        repo: currentRepo,
+        path: audioPath,
+        start_sec: startCopy,
+        end_sec: endSec,
+        started_at: startedAtCopy,
+        ended_at: new Date().toISOString(),
+      }),
+    }).then(() => refreshPlaybackLog(audioPath)).catch(() => {});
+  };
+
+  audio.addEventListener('timeupdate', () => {
+    if (!audio.seeking && !audio.paused) lastTime = audio.currentTime;
+  });
+  audio.addEventListener('play', start);
+  audio.addEventListener('pause', finalize);
+  audio.addEventListener('ended', finalize);
+  audio.addEventListener('seeking', finalize);
+  audio.addEventListener('seeked', () => { if (!audio.paused) start(); });
+
+  refreshPlaybackLog(audioPath);
 }
 
 // iOS Safari 等で touch による dblclick が発火しない/ズームが優先される問題の回避。
