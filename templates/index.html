@@ -1180,6 +1180,7 @@ function formatPlaybackDate(iso) {
 async function refreshPlaybackLog(audioPath) {
   const container = document.getElementById('playback-log-list');
   if (!container) return;
+  const hadRows = !!container.querySelector('.playback-log-rows');
   const url = `/api/playback-log?repo=${encodeURIComponent(currentRepo)}&path=${encodeURIComponent(audioPath)}`;
   try {
     const records = await fetchJson(url);
@@ -1194,7 +1195,10 @@ async function refreshPlaybackLog(audioPath) {
       const seekTo = Math.max(r.start_sec, r.end_sec - 10);
       return `<div class="playback-log-row"><span class="playback-log-when">${esc(when)}</span><span class="playback-log-range" data-seek="${seekTo}">${start}〜${end}</span></div>`;
     }).join('');
-    container.innerHTML = `<div class="playback-log-header">再生履歴 (${records.length})</div>${rows}`;
+    container.innerHTML = `<div class="playback-log-header playback-log-toggle">再生履歴 (${records.length})</div><div class="playback-log-rows">${rows}</div>`;
+    if (!hadRows) container.classList.add('collapsed');
+    const header = container.querySelector('.playback-log-toggle');
+    header.addEventListener('click', () => container.classList.toggle('collapsed'));
     container.querySelectorAll('.playback-log-range').forEach(el => {
       el.addEventListener('click', () => {
         const audio = document.getElementById('audio-player');

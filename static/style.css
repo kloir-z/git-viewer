@@ -566,6 +566,24 @@ button:hover { background: var(--border); }
 .playback-log-range:hover {
   text-decoration: underline;
 }
+.playback-log-toggle {
+  cursor: pointer;
+  user-select: none;
+}
+.playback-log-toggle::before {
+  content: '▶';
+  display: inline-block;
+  margin-right: 4px;
+  font-size: 9px;
+  color: var(--text-dim);
+  transition: transform 120ms;
+}
+.playback-log:not(.collapsed) .playback-log-toggle::before {
+  transform: rotate(90deg);
+}
+.playback-log.collapsed .playback-log-rows {
+  display: none;
+}
 .srt-embed-container {
   margin-top: 10px;
   border-top: 1px solid var(--border);
