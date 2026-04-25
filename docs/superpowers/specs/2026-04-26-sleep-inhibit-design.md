@@ -85,7 +85,7 @@ ping 停止
   合計 最大 ~3.5 分
 ```
 
-体感は「停止から 2-3 分後にスリープ」要件にほぼ収まる。
+要件「停止から 2-3 分後にスリープ」と最悪 3.5 分の間に約 30-60 秒のギャップがあるが、これは TTL を 1 分に下げると 1 ping ロストで切れる脆弱性とのトレードオフ。実用上問題なしと判断。
 
 ### session_id (client_id) の発行
 
@@ -102,27 +102,32 @@ ID フォーマット: `git-viewer-<8 桁の hex>` 程度のランダム文字�
 POST のみ。リクエスト body は `{ "client_id": "<random>" }`。
 
 ```python
+KEEP_AWAKE_SCRIPT = load_keep_awake_script()  # config から読む or None
+
 @app.route("/api/keep-awake", methods=["POST"])
 def keep_awake():
+    # Windows 以外 / cc-nosleep 未設定環境では feature OFF
+    if sys.platform != "win32" or not KEEP_AWAKE_SCRIPT or not KEEP_AWAKE_SCRIPT.is_file():
+        return ("", 204)
     data = request.get_json(silent=True) or {}
     client_id = data.get("client_id", "")
     # サニタイズ: 英数とハイフンのみ、長さ制限
     if not re.fullmatch(r"[A-Za-z0-9-]{1,64}", client_id):
         abort(400)
     session_id = f"git-viewer-{client_id}"
-    payload = json.dumps({"session_id": session_id})
-    script = Path("C:/code/cc-nosleep/scripts/keep-awake.ps1")
-    if not script.is_file():
-        # cc-nosleep が無くても git-viewer は動くべき
-        return ("", 204)
-    proc = subprocess.Popen(
-        ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass",
-         "-File", str(script), "-Minutes", "2"],
-        stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-    )
-    proc.stdin.write(payload.encode("utf-8"))
-    proc.stdin.close()
-    # 待たない (fire-and-forget): keep-awake.ps1 自身は数十ms で終わる
+    payload = json.dumps({"session_id": session_id}).encode("utf-8")
+    try:
+        proc = subprocess.Popen(
+            ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass",
+             "-File", str(KEEP_AWAKE_SCRIPT), "-Minutes", "2"],
+            stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        proc.stdin.write(payload)
+        proc.stdin.close()
+        # 待たない (fire-and-forget): keep-awake.ps1 自身は数十ms で終わる
+    except OSError:
+        # 起動失敗はログのみ。フロントの再生は止めない
+        app.logger.warning("keep-awake.ps1 spawn failed", exc_info=True)
     return ("", 204)
 ```
 
@@ -139,25 +144,23 @@ def keep_awake():
 
 これで Raspberry Pi 上で動かしても (cc-nosleep は Windows 限定) エラーにならない。
 
-#### プラットフォーム判定
-
-`sys.platform != "win32"` の場合は `keep-awake.ps1` を呼ばず即 204 を返す。Raspberry Pi で動作した時に余計な subprocess を発生させない。
-
 #### 失敗時の挙動
 
-- subprocess 起動失敗 → ログだけ出して 204 を返す (フロントの再生は止めない)
+- Windows 以外 OR スクリプト未配置 → 即 204 (feature OFF)
+- subprocess 起動失敗 → `app.logger.warning` でログだけ出して 204 (フロントの再生は止めない)
 - 成功時も 204。レスポンスボディなし
 
 ### フロントエンド実装ポイント
 
-- 既存の `<audio id="audio-player">` を捕まえて `play` / `pause` / `ended` を listen
-- ページ全体の `visibilitychange` を listen
-- `setInterval` のハンドルを 1 つ持ち、ページ遷移 (audio 要素差し替え) で leak しないように `clearInterval` する
-- `fetch('/api/keep-awake', {method:'POST', body: JSON.stringify({client_id})}).catch(() => {})` で失敗は黙殺
+- ページロード時に **グローバルに 1 度だけ** `setInterval(tick, 20000)` を起動。再生成しない (audio 要素切り替えに連動させない)
+- tick 内で毎回 `document.getElementById('audio-player')` を取り直す。要素が無い or `.paused === true` なら audio 条件 false
+- `document.addEventListener('visibilitychange', ...)` で hidden→visible 時に即 1 回 ping
+- audio に対しては bubbling phase の `play` イベントを `document.addEventListener('play', ..., true)` で拾う。これも即 ping
+- `fetch('/api/keep-awake', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({client_id})}).catch(() => {})` で失敗は黙殺
 
 #### audio 要素の動的な差し替え
 
-`templates/index.html` の `selectFile` (該当箇所は `<audio id="audio-player">` を innerHTML で書き換える 939 行付近) でファイルを切り替えるたびに新しい audio 要素になる。pinger は audio 要素に紐付けず、グローバルに 1 つだけ持ち、tick ごとに `document.getElementById('audio-player')` を取り直して `.paused` を見る方式が安全。
+`templates/index.html` の `selectFile` 内でファイルを切り替えるたびに `<audio id="audio-player">` を含む HTML を innerHTML で再生成する箇所がある。pinger は audio 要素に直接 listener を貼らず、tick ごとに `document.getElementById('audio-player')` を取り直して `.paused` を見る方式にすることで、要素差し替えの影響を受けない。`play` イベントは `document` の capturing phase で拾うので audio 要素差し替えにも追随する。
 
 ## エッジケース
 
