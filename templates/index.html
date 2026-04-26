@@ -1006,6 +1006,9 @@ async function showBlob(path) {
     });
     const bm = await fetchBookmark(path);
     applyBookmarkUi(blobView, bm);
+    await fetchNotes(path);
+    decorateMdNotes(mdBody);
+    renderUnresolvedPanel(blobView);
   } else if (fileExt === '.srt') {
     const cues = parseSrt(data.content);
     if (cues.length === 0) {
@@ -1469,6 +1472,89 @@ function decorateSrtNotes(blobView, cues) {
     const meta = cueEl.querySelector('.srt-meta');
     if (meta) meta.appendChild(marker);
   });
+}
+
+function decorateMdNotes(blobView) {
+  const sentences = blobView.querySelectorAll('[data-bm-idx]');
+  const indexByText = new Map();
+  sentences.forEach(node => {
+    const idx = Number(node.getAttribute('data-bm-idx'));
+    const text = node.textContent.trim();
+    if (!indexByText.has(text)) indexByText.set(text, []);
+    indexByText.get(text).push({ idx, node });
+  });
+
+  const sectionsForRelocate = [];
+  for (const sec of notesState.resolved) {
+    if (sec.anchor.kind !== 'md_sentence') continue;
+    let resolvedNode = null;
+    let resolvedIdx = null;
+    let relocated = false;
+
+    const origNode = blobView.querySelector(`[data-bm-idx="${sec.anchor.index}"]`);
+    if (origNode && sec.snapshot && origNode.textContent.trim() === sec.snapshot.text.trim()) {
+      resolvedNode = origNode;
+      resolvedIdx = sec.anchor.index;
+    } else if (sec.snapshot) {
+      const candidates = indexByText.get(sec.snapshot.text.trim()) || [];
+      if (candidates.length === 0) {
+        notesState.unresolved.push({ ...sec, reason: 'MD: 同一の文が見つからなかった' });
+        continue;
+      }
+      const best = candidates.reduce((a, b) =>
+        Math.abs(a.idx - sec.anchor.index) <= Math.abs(b.idx - sec.anchor.index) ? a : b
+      );
+      resolvedNode = best.node;
+      resolvedIdx = best.idx;
+      relocated = (resolvedIdx !== sec.anchor.index);
+    } else if (origNode) {
+      resolvedNode = origNode;
+      resolvedIdx = sec.anchor.index;
+    } else {
+      notesState.unresolved.push({ ...sec, reason: 'MD: index がファイル外でスナップショットなし' });
+      continue;
+    }
+
+    if (relocated) {
+      sectionsForRelocate.push({
+        old_anchor: sec.anchor,
+        new_anchor: { kind: 'md_sentence', index: resolvedIdx },
+        heading_text: (sec.snapshot?.text || '').slice(0, 30),
+      });
+    }
+    sec.anchor = { ...sec.anchor, index: resolvedIdx };
+
+    const marker = document.createElement('span');
+    marker.className = 'note-marker has-note';
+    marker.textContent = '💬';
+    marker.title = '編集';
+    marker.onclick = (e) => {
+      e.stopPropagation();
+      openNoteModal({ kind: 'md_sentence', existing: sec });
+    };
+    resolvedNode.appendChild(marker);
+  }
+
+  sentences.forEach(node => {
+    if (node.querySelector('.note-marker')) return;
+    const idx = Number(node.getAttribute('data-bm-idx'));
+    const marker = document.createElement('span');
+    marker.className = 'note-marker add-note';
+    marker.textContent = '💬';
+    marker.title = 'メモを追加';
+    marker.onclick = (e) => {
+      e.stopPropagation();
+      const text = node.textContent.trim();
+      const anchor = { kind: 'md_sentence', index: idx };
+      const snapshot = { kind: 'md_sentence', index: idx, text };
+      openNoteModal({ kind: 'md_sentence', anchor, snapshot });
+    };
+    node.appendChild(marker);
+  });
+
+  for (const r of sectionsForRelocate) {
+    relocateNote(r.old_anchor, r.new_anchor, r.heading_text).catch(() => {});
+  }
 }
 
 function openNoteModal(opts) { console.log('openNoteModal', opts); }
