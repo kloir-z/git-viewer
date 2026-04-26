@@ -591,6 +591,11 @@ async function setupSrtEmbed(audioPath) {
   container.innerHTML = `<div class="srt-embed-header">字幕 (<span class="srt-embed-filename">${esc(srtName)}</span>)</div>${cardsHtml}`;
 
   setupSrtSync(audio, container, cues);
+
+  await fetchNotes(result.path);
+  notesState.embedMode = true;
+  notesState.embedCues = cues;
+  decorateEmbeddedSrtNotes(container, cues);
 }
 
 function setupSrtSync(audio, container, cues) {
@@ -1616,9 +1621,61 @@ function formatAnchorLabel(a) {
 }
 
 async function reloadCurrentBlob() {
+  if (notesState.embedMode) {
+    await reloadEmbedNotes();
+    return;
+  }
   if (notesState.path) {
     await showBlob(notesState.path);
   }
+}
+
+function decorateEmbeddedSrtNotes(container, cues) {
+  const byKey = new Map();
+  for (const sec of notesState.resolved) {
+    if (sec.anchor.kind !== 'srt') continue;
+    byKey.set(`${sec.anchor.start_ms}-${sec.anchor.end_ms}`, sec);
+  }
+  container.querySelectorAll('.srt-cue').forEach((cueEl, idx) => {
+    const cue = cues[idx];
+    if (!cue) return;
+    const startMs = srtTimeToMs(cue.start);
+    const endMs = srtTimeToMs(cue.end);
+    if (startMs == null || endMs == null) return;
+    const key = `${startMs}-${endMs}`;
+    const sec = byKey.get(key);
+    const marker = document.createElement('span');
+    marker.className = 'note-marker ' + (sec ? 'has-note' : 'add-note');
+    marker.textContent = '💬';
+    marker.title = sec ? '編集' : 'メモを追加';
+    marker.onclick = (e) => {
+      e.stopPropagation();
+      if (sec) {
+        openNoteModal({ kind: 'srt', existing: sec });
+      } else {
+        const anchor = { kind: 'srt', start_ms: startMs, end_ms: endMs };
+        const snapshot = {
+          kind: 'srt', start_ms: startMs, end_ms: endMs,
+          cue_index: idx + 1, text: cue.text,
+        };
+        openNoteModal({ kind: 'srt', anchor, snapshot });
+      }
+    };
+    const meta = cueEl.querySelector('.srt-meta');
+    if (meta) meta.appendChild(marker);
+  });
+}
+
+async function reloadEmbedNotes() {
+  const container = document.getElementById('srt-embed');
+  const cues = notesState.embedCues;
+  const path = notesState.path;
+  if (!container || !cues || !path) return;
+  container.querySelectorAll('.note-marker').forEach(m => m.remove());
+  await fetchNotes(path);
+  notesState.embedMode = true;
+  notesState.embedCues = cues;
+  decorateEmbeddedSrtNotes(container, cues);
 }
 
 async function decorateNotesBadges() {
