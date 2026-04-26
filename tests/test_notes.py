@@ -325,3 +325,67 @@ def test_atomic_write_no_temp_left_behind(tmp_path):
     atomic_write_text(target, "x")
     leftovers = [p for p in tmp_path.iterdir() if p.name != "out.md"]
     assert leftovers == []
+
+
+from notes import resolve_lines_anchor
+
+
+def _make_snap(start, end, text):
+    return {"kind": "lines", "start": start, "end": end, "text": text}
+
+
+def test_resolve_lines_exact_match():
+    file_text = "a\nb\nc\nd\ne\n"
+    snap = _make_snap(2, 3, "b\nc")
+    result = resolve_lines_anchor(file_text, anchor={"kind": "lines", "start": 2, "end": 3}, snapshot=snap)
+    assert result.resolved is True
+    assert result.relocated is False
+    assert result.start == 2
+    assert result.end == 3
+
+
+def test_resolve_lines_relocated_within_50():
+    file_text = "a\nb\nc\nd\ne\nf\ng\nx\ny\nz\n"
+    snap = _make_snap(5, 6, "x\ny")
+    result = resolve_lines_anchor(file_text, anchor={"kind": "lines", "start": 5, "end": 6}, snapshot=snap)
+    assert result.resolved is True
+    assert result.relocated is True
+    assert result.start == 8
+    assert result.end == 9
+
+
+def test_resolve_lines_unresolved_when_text_gone():
+    file_text = "a\nb\nc\n"
+    snap = _make_snap(1, 2, "x\ny")
+    result = resolve_lines_anchor(file_text, anchor={"kind": "lines", "start": 1, "end": 2}, snapshot=snap)
+    assert result.resolved is False
+
+
+def test_resolve_lines_unresolved_when_outside_50():
+    snap_text = "x\ny"
+    file_text = "\n".join(["pad"] * 100 + snap_text.split("\n") + ["pad"] * 5) + "\n"
+    snap = _make_snap(5, 6, snap_text)
+    result = resolve_lines_anchor(file_text, anchor={"kind": "lines", "start": 5, "end": 6}, snapshot=snap)
+    assert result.resolved is False
+
+
+def test_resolve_lines_picks_nearest_when_multiple_candidates():
+    snap_text = "TARGET"
+    file_text = "TARGET\n" + "\n".join(["x"] * 9) + "\nTARGET\n" + "\n".join(["y"] * 5) + "\n"
+    snap = _make_snap(11, 11, snap_text)
+    result = resolve_lines_anchor(file_text, anchor={"kind": "lines", "start": 11, "end": 11}, snapshot=snap)
+    assert result.resolved is True
+    assert result.start == 11  # nearest
+
+
+def test_resolve_lines_no_snapshot_uses_anchor_range():
+    file_text = "a\nb\nc\n"
+    result = resolve_lines_anchor(file_text, anchor={"kind": "lines", "start": 2, "end": 3}, snapshot=None)
+    assert result.resolved is True
+    assert result.relocated is False
+
+
+def test_resolve_lines_no_snapshot_out_of_range():
+    file_text = "a\nb\n"
+    result = resolve_lines_anchor(file_text, anchor={"kind": "lines", "start": 5, "end": 6}, snapshot=None)
+    assert result.resolved is False

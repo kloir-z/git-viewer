@@ -250,3 +250,72 @@ def atomic_write_text(path: Path, text: str) -> None:
         except OSError:
             pass
         raise
+
+
+@dataclass
+class LinesResolution:
+    resolved: bool
+    relocated: bool = False
+    start: int = 0
+    end: int = 0
+    reason: str = ""
+
+
+def _normalize_block(s: str) -> str:
+    lines = s.split("\n")
+    return "\n".join(line.rstrip() for line in lines).rstrip("\n")
+
+
+def resolve_lines_anchor(file_text: str, anchor: dict, snapshot: dict | None) -> LinesResolution:
+    file_lines = file_text.split("\n")
+    if file_lines and file_lines[-1] == "":
+        file_lines.pop()  # drop trailing empty from final newline
+
+    anchor_start, anchor_end = anchor["start"], anchor["end"]
+    n = len(file_lines)
+
+    if snapshot is None:
+        if 1 <= anchor_start <= anchor_end <= n:
+            return LinesResolution(resolved=True, start=anchor_start, end=anchor_end)
+        return LinesResolution(resolved=False, reason="行範囲がファイル外")
+
+    snap_text = snapshot.get("text", "")
+    snap_lines = snap_text.split("\n")
+    if snap_lines and snap_lines[-1] == "":
+        snap_lines.pop()
+    block_size = len(snap_lines)
+    if block_size == 0:
+        if 1 <= anchor_start <= anchor_end <= n:
+            return LinesResolution(resolved=True, start=anchor_start, end=anchor_end)
+        return LinesResolution(resolved=False, reason="スナップショットが空")
+
+    target = _normalize_block(snap_text)
+
+    # exact-position check
+    if 1 <= anchor_start and anchor_start - 1 + block_size <= n:
+        chunk = "\n".join(file_lines[anchor_start - 1 : anchor_start - 1 + block_size])
+        if _normalize_block(chunk) == target:
+            return LinesResolution(
+                resolved=True, start=anchor_start, end=anchor_start + block_size - 1
+            )
+
+    # search ±50
+    search_min = max(1, anchor_start - 50)
+    search_max = n - block_size + 1
+    if anchor_end + 50 < search_max:
+        search_max = anchor_end + 50
+
+    candidates = []
+    for i in range(search_min, search_max + 1):
+        chunk = "\n".join(file_lines[i - 1 : i - 1 + block_size])
+        if _normalize_block(chunk) == target:
+            candidates.append(i)
+
+    if not candidates:
+        return LinesResolution(resolved=False, reason="行範囲のテキストが見つからなかった")
+
+    best = min(candidates, key=lambda i: abs(i - anchor_start))
+    return LinesResolution(
+        resolved=True, relocated=(best != anchor_start),
+        start=best, end=best + block_size - 1,
+    )
