@@ -115,3 +115,98 @@ def test_format_md_sentence_escapes_quote():
 def test_format_srt():
     out = format_anchor_heading({"kind": "srt", "start_ms": 83456, "end_ms": 90000})
     assert out == "00:01:23,456 --> 00:01:30,000"
+
+
+from notes import parse_notes_md
+
+
+def test_parse_empty_string():
+    doc = parse_notes_md("")
+    assert doc.title is None
+    assert doc.resolved == []
+    assert doc.unresolved == []
+
+
+def test_parse_title_only():
+    doc = parse_notes_md("# Notes for foo.py\n")
+    assert doc.title == "Notes for foo.py"
+    assert doc.resolved == []
+
+
+def test_parse_single_lines_section():
+    md = (
+        "# Notes for foo.py\n"
+        "\n"
+        "## L10-15\n"
+        "\n"
+        '<!--snapshot:{"kind":"lines","start":10,"end":15,"text":"foo"}-->\n'
+        "\n"
+        "メモ本文1行目\n"
+        "メモ本文2行目\n"
+    )
+    doc = parse_notes_md(md)
+    assert len(doc.resolved) == 1
+    sec = doc.resolved[0]
+    assert sec.anchor == {"kind": "lines", "start": 10, "end": 15}
+    assert sec.snapshot == {"kind": "lines", "start": 10, "end": 15, "text": "foo"}
+    assert sec.body.strip() == "メモ本文1行目\nメモ本文2行目"
+
+
+def test_parse_two_sections_and_unresolved():
+    md = (
+        "# Notes for foo.py\n"
+        "## L10\n"
+        '<!--snapshot:{"kind":"lines","start":10,"end":10,"text":"a"}-->\n'
+        "first\n"
+        "## L20\n"
+        '<!--snapshot:{"kind":"lines","start":20,"end":20,"text":"b"}-->\n'
+        "second\n"
+        "## Unresolved\n"
+        "### L99\n"
+        '<!--snapshot:{"kind":"lines","start":99,"end":99,"text":"c"}-->\n'
+        "未解決理由: ファイルの行数が不足\n"
+        "third\n"
+    )
+    doc = parse_notes_md(md)
+    assert len(doc.resolved) == 2
+    assert len(doc.unresolved) == 1
+    assert doc.unresolved[0].anchor == {"kind": "lines", "start": 99, "end": 99}
+    assert "third" in doc.unresolved[0].body
+
+
+def test_parse_unrecognized_heading_is_ignored():
+    md = (
+        "## NonsenseHeading\n"
+        "ignored body\n"
+        "## L1\n"
+        '<!--snapshot:{"kind":"lines","start":1,"end":1,"text":"x"}-->\n'
+        "real\n"
+    )
+    doc = parse_notes_md(md)
+    assert len(doc.resolved) == 1
+    assert "real" in doc.resolved[0].body
+
+
+def test_parse_missing_snapshot_kept_as_none():
+    md = (
+        "## L1\n"
+        "no snapshot here\n"
+    )
+    doc = parse_notes_md(md)
+    assert len(doc.resolved) == 1
+    assert doc.resolved[0].snapshot is None
+    assert "no snapshot here" in doc.resolved[0].body
+
+
+def test_parse_duplicate_anchor_first_wins():
+    md = (
+        "## L1\n"
+        '<!--snapshot:{"kind":"lines","start":1,"end":1,"text":"a"}-->\n'
+        "first\n"
+        "## L1\n"
+        '<!--snapshot:{"kind":"lines","start":1,"end":1,"text":"b"}-->\n'
+        "second\n"
+    )
+    doc = parse_notes_md(md)
+    assert len(doc.resolved) == 1
+    assert "first" in doc.resolved[0].body

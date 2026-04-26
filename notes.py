@@ -88,3 +88,106 @@ def format_anchor_heading(anchor: dict) -> str:
     if kind == "unresolved":
         return "Unresolved"
     raise ValueError(f"unknown anchor kind: {kind}")
+
+
+from dataclasses import dataclass, field
+
+
+@dataclass
+class NotesSection:
+    anchor: dict
+    snapshot: dict | None
+    body: str
+
+
+@dataclass
+class NotesDoc:
+    title: str | None = None
+    resolved: list[NotesSection] = field(default_factory=list)
+    unresolved: list[NotesSection] = field(default_factory=list)
+
+
+def parse_notes_md(text: str) -> NotesDoc:
+    doc = NotesDoc()
+    lines = text.splitlines()
+    i = 0
+    in_unresolved = False
+    seen_anchors: set[tuple] = set()
+
+    # title
+    if i < len(lines) and lines[i].startswith("# "):
+        doc.title = lines[i][2:].strip()
+        i += 1
+
+    while i < len(lines):
+        line = lines[i]
+        if line.startswith("## "):
+            heading = line[3:].strip()
+            anchor = parse_anchor_heading(heading)
+            i += 1
+            if anchor and anchor["kind"] == "unresolved":
+                in_unresolved = True
+                continue
+            section, i = _consume_section_body(lines, i, level=2)
+            if anchor is None:
+                continue  # ignore unrecognized headings
+            key = _anchor_key(anchor)
+            if key in seen_anchors:
+                continue
+            seen_anchors.add(key)
+            section.anchor = anchor
+            target = doc.unresolved if in_unresolved else doc.resolved
+            target.append(section)
+        elif line.startswith("### ") and in_unresolved:
+            heading = line[4:].strip()
+            anchor = parse_anchor_heading(heading)
+            i += 1
+            section, i = _consume_section_body(lines, i, level=3)
+            if anchor is None or anchor["kind"] == "unresolved":
+                continue
+            key = _anchor_key(anchor)
+            if key in seen_anchors:
+                continue
+            seen_anchors.add(key)
+            section.anchor = anchor
+            doc.unresolved.append(section)
+        else:
+            i += 1
+    return doc
+
+
+def _consume_section_body(lines, start, level):
+    """Consume body lines until next heading at same or higher level. Returns (section, new_index)."""
+    body_lines = []
+    snapshot = None
+    i = start
+    boundary_prefixes = ["## "] if level == 2 else ["## ", "### "]
+    while i < len(lines):
+        line = lines[i]
+        if any(line.startswith(p) for p in boundary_prefixes):
+            break
+        if snapshot is None:
+            decoded = decode_snapshot(line)
+            if decoded is not None:
+                snapshot = decoded
+                i += 1
+                continue
+        body_lines.append(line)
+        i += 1
+    while body_lines and body_lines[0].strip() == "":
+        body_lines.pop(0)
+    while body_lines and body_lines[-1].strip() == "":
+        body_lines.pop()
+    body = "\n".join(body_lines)
+    return NotesSection(anchor={}, snapshot=snapshot, body=body), i
+
+
+def _anchor_key(anchor: dict) -> tuple:
+    kind = anchor["kind"]
+    if kind == "lines":
+        return ("lines", anchor["start"], anchor["end"])
+    if kind == "md_sentence":
+        return ("md_sentence", anchor["index"])
+    if kind == "srt":
+        return ("srt", anchor["start_ms"], anchor["end_ms"])
+    return (kind,)
