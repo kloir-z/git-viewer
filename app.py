@@ -685,6 +685,38 @@ def _resolve_doc_server_side(doc, target_path, kind: str) -> bool:
     return mutated
 
 
+def _validate_anchor(a):
+    if not isinstance(a, dict) or "kind" not in a:
+        return False
+    k = a["kind"]
+    if k == "lines":
+        return all(isinstance(a.get(x), int) for x in ("start", "end")) and a["start"] >= 1 and a["end"] >= a["start"]
+    if k == "md_sentence":
+        return isinstance(a.get("index"), int) and a["index"] >= 0
+    if k == "srt":
+        return all(isinstance(a.get(x), int) for x in ("start_ms", "end_ms"))
+    return False
+
+
+def _validate_snapshot(s):
+    if s is None:
+        return True
+    if not isinstance(s, dict):
+        return False
+    if isinstance(s.get("text"), str) and len(s["text"]) > SNAPSHOT_TEXT_LIMIT:
+        return False
+    return True
+
+
+def _check_mtime(notes_full, expected):
+    actual = notes_full.stat().st_mtime if notes_full.is_file() else None
+    if expected is None:
+        return actual is None
+    if actual is None:
+        return False
+    return abs(actual - float(expected)) < 1e-6
+
+
 @app.route("/api/notes")
 def notes_get():
     name = request.args.get("repo", "")
@@ -739,6 +771,44 @@ def notes_get():
         "resolved": resolved_out,
         "unresolved": unresolved_out,
     })
+
+
+@app.route("/api/notes", methods=["PUT"])
+def notes_put():
+    data = request.get_json(silent=True) or {}
+    name = data.get("repo", "")
+    path = data.get("path", "")
+    anchor = data.get("anchor")
+    snapshot = data.get("snapshot")
+    body = data.get("body", "")
+    if_match = data.get("if_match_mtime", None)
+    if not isinstance(body, str):
+        abort(400)
+    if not _validate_anchor(anchor) or not _validate_snapshot(snapshot):
+        abort(400)
+    repo_path = valid_repo(name)
+    if not path or ".." in path or path.endswith(NOTES_SUFFIX):
+        abort(400)
+    target_full = (repo_path / path).resolve()
+    if not str(target_full).startswith(str(repo_path.resolve())):
+        abort(403)
+    notes_full = target_full.parent / (target_full.name + NOTES_SUFFIX)
+
+    if not _check_mtime(notes_full, if_match):
+        abort(409)
+
+    if notes_full.is_file():
+        doc = notes_mod.load_notes(notes_full)
+    else:
+        doc = notes_mod.NotesDoc(title=f"Notes for {target_full.name}")
+    if doc.title is None:
+        doc.title = f"Notes for {target_full.name}"
+
+    section = notes_mod.NotesSection(anchor=anchor, snapshot=snapshot, body=body)
+    notes_mod.upsert_section(doc, section)
+    notes_mod.save_notes(notes_full, doc)
+
+    return jsonify({"mtime": notes_full.stat().st_mtime})
 
 
 if __name__ == "__main__":

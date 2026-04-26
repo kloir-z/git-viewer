@@ -68,6 +68,82 @@ def test_parse_srt():
     }
 
 
+def test_put_notes_creates_file(app_client):
+    client, repo = app_client
+    (repo / "foo.py").write_text("a\nb\n", encoding="utf-8")
+    payload = {
+        "repo": "myrepo",
+        "path": "foo.py",
+        "if_match_mtime": None,
+        "anchor": {"kind": "lines", "start": 1, "end": 1},
+        "snapshot": {"kind": "lines", "start": 1, "end": 1, "text": "a"},
+        "body": "ここはこう",
+    }
+    resp = client.put("/api/notes", json=payload)
+    assert resp.status_code == 200
+    assert resp.get_json()["mtime"] is not None
+    notes_text = (repo / "foo.py.notes.md").read_text(encoding="utf-8")
+    assert "## L1" in notes_text
+    assert "ここはこう" in notes_text
+
+
+def test_put_notes_overwrites_existing(app_client):
+    client, repo = app_client
+    (repo / "foo.py").write_text("a\n", encoding="utf-8")
+    initial = (
+        "## L1\n"
+        '<!--snapshot:{"kind":"lines","start":1,"end":1,"text":"a"}-->\n'
+        "old body\n"
+    )
+    notes_path = repo / "foo.py.notes.md"
+    notes_path.write_text(initial, encoding="utf-8")
+    mtime = notes_path.stat().st_mtime
+    payload = {
+        "repo": "myrepo",
+        "path": "foo.py",
+        "if_match_mtime": mtime,
+        "anchor": {"kind": "lines", "start": 1, "end": 1},
+        "snapshot": {"kind": "lines", "start": 1, "end": 1, "text": "a"},
+        "body": "new body",
+    }
+    resp = client.put("/api/notes", json=payload)
+    assert resp.status_code == 200
+    text = notes_path.read_text(encoding="utf-8")
+    assert "new body" in text
+    assert "old body" not in text
+
+
+def test_put_notes_mtime_conflict(app_client):
+    client, repo = app_client
+    (repo / "foo.py").write_text("a\n", encoding="utf-8")
+    notes_path = repo / "foo.py.notes.md"
+    notes_path.write_text("## L1\nbody\n", encoding="utf-8")
+    payload = {
+        "repo": "myrepo",
+        "path": "foo.py",
+        "if_match_mtime": 0.0,
+        "anchor": {"kind": "lines", "start": 1, "end": 1},
+        "snapshot": None,
+        "body": "x",
+    }
+    resp = client.put("/api/notes", json=payload)
+    assert resp.status_code == 409
+
+
+def test_put_notes_rejects_huge_snapshot(app_client):
+    client, repo = app_client
+    (repo / "foo.py").write_text("a\n", encoding="utf-8")
+    huge = "x" * (50 * 1024 + 1)
+    payload = {
+        "repo": "myrepo", "path": "foo.py", "if_match_mtime": None,
+        "anchor": {"kind": "lines", "start": 1, "end": 1},
+        "snapshot": {"kind": "lines", "start": 1, "end": 1, "text": huge},
+        "body": "x",
+    }
+    resp = client.put("/api/notes", json=payload)
+    assert resp.status_code == 400
+
+
 def test_parse_srt_with_dot_separator():
     assert parse_anchor_heading("00:00:01.500 --> 00:00:02.000") == {
         "kind": "srt", "start_ms": 1500, "end_ms": 2000,
