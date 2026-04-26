@@ -497,3 +497,98 @@ def test_delete_not_found():
     doc = NotesDoc()
     deleted = delete_section(doc, {"kind": "lines", "start": 1, "end": 1})
     assert deleted is False
+
+
+import pytest
+
+
+@pytest.fixture
+def app_client(tmp_path, monkeypatch):
+    """Flask test client with CODE_DIR pointing at a tmp repo."""
+    repo = tmp_path / "myrepo"
+    (repo / ".git").mkdir(parents=True)
+    monkeypatch.setenv("GIT_VIEWER_CODE_DIR", str(tmp_path))
+    import sys
+    if "app" in sys.modules:
+        del sys.modules["app"]
+    import app as flask_app  # noqa: F401
+    flask_app.app.config["TESTING"] = True
+    return flask_app.app.test_client(), repo
+
+
+def test_get_notes_missing_file(app_client):
+    client, repo = app_client
+    (repo / "foo.py").write_text("x = 1\n", encoding="utf-8")
+    resp = client.get("/api/notes?repo=myrepo&path=foo.py")
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["mtime"] is None
+    assert body["resolved"] == []
+    assert body["unresolved"] == []
+    assert body["kind"] == "lines"
+
+
+def test_get_notes_resolved_lines(app_client):
+    client, repo = app_client
+    (repo / "foo.py").write_text("a\nb\nc\nd\ne\n", encoding="utf-8")
+    notes = (
+        "# Notes for foo.py\n"
+        "## L2-3\n"
+        '<!--snapshot:{"kind":"lines","start":2,"end":3,"text":"b\\nc"}-->\n'
+        "メモ\n"
+    )
+    (repo / "foo.py.notes.md").write_text(notes, encoding="utf-8")
+    resp = client.get("/api/notes?repo=myrepo&path=foo.py")
+    body = resp.get_json()
+    assert len(body["resolved"]) == 1
+    sec = body["resolved"][0]
+    assert sec["anchor"] == {"kind": "lines", "start": 2, "end": 3}
+    assert sec["relocated"] is False
+
+
+def test_get_notes_relocates_and_writes_back(app_client):
+    client, repo = app_client
+    (repo / "foo.py").write_text("\n\n\nb\nc\nd\n", encoding="utf-8")
+    notes = (
+        "# Notes for foo.py\n"
+        "## L1-2\n"
+        '<!--snapshot:{"kind":"lines","start":1,"end":2,"text":"b\\nc"}-->\n'
+        "メモ\n"
+    )
+    notes_path = repo / "foo.py.notes.md"
+    notes_path.write_text(notes, encoding="utf-8")
+    resp = client.get("/api/notes?repo=myrepo&path=foo.py")
+    body = resp.get_json()
+    assert body["resolved"][0]["anchor"] == {"kind": "lines", "start": 4, "end": 5}
+    # File rewritten with new heading
+    assert "## L4-5" in notes_path.read_text(encoding="utf-8")
+
+
+def test_get_notes_unresolved_lines(app_client):
+    client, repo = app_client
+    (repo / "foo.py").write_text("a\n", encoding="utf-8")
+    notes = (
+        "## L10\n"
+        '<!--snapshot:{"kind":"lines","start":10,"end":10,"text":"missing"}-->\n'
+        "メモ\n"
+    )
+    (repo / "foo.py.notes.md").write_text(notes, encoding="utf-8")
+    resp = client.get("/api/notes?repo=myrepo&path=foo.py")
+    body = resp.get_json()
+    assert body["resolved"] == []
+    assert len(body["unresolved"]) == 1
+
+
+def test_get_notes_md_returns_client_resolve_flag(app_client):
+    client, repo = app_client
+    (repo / "doc.md").write_text("hello\n", encoding="utf-8")
+    notes = (
+        "## S0 \"hello\"\n"
+        '<!--snapshot:{"kind":"md_sentence","index":0,"text":"hello"}-->\n'
+        "メモ\n"
+    )
+    (repo / "doc.md.notes.md").write_text(notes, encoding="utf-8")
+    resp = client.get("/api/notes?repo=myrepo&path=doc.md")
+    body = resp.get_json()
+    assert body["kind"] == "md_sentence"
+    assert body["resolved"][0]["client_resolve"] is True

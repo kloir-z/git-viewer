@@ -7,6 +7,8 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+import notes as notes_mod
+
 from flask import Flask, Response, abort, jsonify, render_template, request, send_file
 
 app = Flask(__name__)
@@ -611,6 +613,132 @@ def keep_awake():
     except (OSError, BrokenPipeError):
         app.logger.warning("keep-awake.ps1 spawn failed", exc_info=True)
     return ("", 204)
+
+
+NOTES_SUFFIX = ".notes.md"
+SNAPSHOT_TEXT_LIMIT = 50 * 1024  # 50 KB
+
+
+def _notes_kind_for_path(path: str) -> str:
+    ext = ('.' + path.rsplit('.', 1)[1]).lower() if '.' in path else ''
+    if ext == '.md':
+        return 'md_sentence'
+    if ext == '.srt':
+        return 'srt'
+    return 'lines'
+
+
+def _promote_to_unresolved(sec, reason):
+    body = sec.body or ""
+    if "未解決理由:" not in body.split("\n", 1)[0]:
+        sec.body = f"未解決理由: {reason}\n\n{body}".rstrip() + "\n"
+
+
+def _resolve_doc_server_side(doc, target_path, kind: str) -> bool:
+    """Resolve text/code or SRT anchors in place. Returns True if doc mutated."""
+    if not target_path.is_file():
+        if doc.resolved:
+            for sec in doc.resolved:
+                _promote_to_unresolved(sec, "対象ファイルが存在しない")
+                doc.unresolved.append(sec)
+            doc.resolved = []
+            return True
+        return False
+
+    mutated = False
+    file_text = target_path.read_text(encoding="utf-8", errors="replace")
+
+    if kind == 'srt':
+        cues = notes_mod.parse_srt_cues(file_text)
+        new_resolved = []
+        for sec in doc.resolved:
+            if sec.anchor["kind"] != "srt":
+                new_resolved.append(sec)
+                continue
+            r = notes_mod.resolve_srt_anchor(cues, sec.anchor)
+            if r.resolved:
+                new_resolved.append(sec)
+            else:
+                _promote_to_unresolved(sec, r.reason or "SRT タイムコード不一致")
+                doc.unresolved.append(sec)
+                mutated = True
+        doc.resolved = new_resolved
+    elif kind == 'lines':
+        new_resolved = []
+        for sec in doc.resolved:
+            if sec.anchor["kind"] != "lines":
+                new_resolved.append(sec)
+                continue
+            r = notes_mod.resolve_lines_anchor(file_text, sec.anchor, sec.snapshot)
+            if not r.resolved:
+                _promote_to_unresolved(sec, r.reason or "行範囲解決失敗")
+                doc.unresolved.append(sec)
+                mutated = True
+                continue
+            if r.relocated:
+                sec.anchor = {"kind": "lines", "start": r.start, "end": r.end}
+                mutated = True
+            new_resolved.append(sec)
+        doc.resolved = new_resolved
+    # md_sentence: no server-side changes
+
+    return mutated
+
+
+@app.route("/api/notes")
+def notes_get():
+    name = request.args.get("repo", "")
+    path = request.args.get("path", "")
+    repo_path = valid_repo(name)
+    if not path or ".." in path or path.endswith(NOTES_SUFFIX):
+        abort(400)
+
+    target_full = (repo_path / path).resolve()
+    if not str(target_full).startswith(str(repo_path.resolve())):
+        abort(403)
+
+    kind = _notes_kind_for_path(path)
+    notes_full = target_full.parent / (target_full.name + NOTES_SUFFIX)
+
+    if not notes_full.is_file():
+        return jsonify({"mtime": None, "kind": kind, "resolved": [], "unresolved": []})
+
+    doc = notes_mod.load_notes(notes_full)
+    mutated = _resolve_doc_server_side(doc, target_full, kind)
+    if mutated:
+        notes_mod.save_notes(notes_full, doc)
+    mtime = notes_full.stat().st_mtime
+
+    def _extract_reason(body):
+        first = (body or "").split("\n", 1)[0]
+        if first.startswith("未解決理由:"):
+            return first[len("未解決理由:"):].strip()
+        return ""
+
+    def section_to_dict(sec, *, unresolved=False, client_resolve=False):
+        d = {
+            "anchor": sec.anchor,
+            "snapshot": sec.snapshot,
+            "body": sec.body,
+        }
+        if not unresolved:
+            d["relocated"] = False
+            if client_resolve:
+                d["client_resolve"] = True
+        else:
+            d["reason"] = _extract_reason(sec.body) or "アンカーが解決できない"
+        return d
+
+    is_md = (kind == 'md_sentence')
+    resolved_out = [section_to_dict(s, client_resolve=is_md) for s in doc.resolved]
+    unresolved_out = [section_to_dict(s, unresolved=True) for s in doc.unresolved]
+
+    return jsonify({
+        "mtime": mtime,
+        "kind": kind,
+        "resolved": resolved_out,
+        "unresolved": unresolved_out,
+    })
 
 
 if __name__ == "__main__":
