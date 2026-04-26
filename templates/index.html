@@ -1042,6 +1042,9 @@ async function showBlob(path) {
     });
     const bm = await fetchBookmark(path);
     applyBookmarkUi(blobView, bm);
+    await fetchNotes(path);
+    decorateSrtNotes(blobView, cues);
+    renderUnresolvedPanel(blobView);
   } else {
     const lang = LANG_MAP[fileExt] || 'plaintext';
     let highlighted;
@@ -1412,6 +1415,59 @@ function decorateTextNotes(blobView, path) {
       }
     };
     line.appendChild(marker);
+  });
+}
+
+function srtMsToTime(ms) {
+  const total = Math.round(ms);
+  const h = String(Math.floor(total / 3600000)).padStart(2, '0');
+  const m = String(Math.floor((total % 3600000) / 60000)).padStart(2, '0');
+  const s = String(Math.floor((total % 60000) / 1000)).padStart(2, '0');
+  const r = String(total % 1000).padStart(3, '0');
+  return `${h}:${m}:${s},${r}`;
+}
+
+function srtTimeToMs(s) {
+  const m = /^(\d{2}):(\d{2}):(\d{2})[,.](\d{3})$/.exec(s.trim());
+  if (!m) return null;
+  return ((+m[1] * 60 + +m[2]) * 60 + +m[3]) * 1000 + +m[4];
+}
+
+function decorateSrtNotes(blobView, cues) {
+  const byKey = new Map();
+  for (const sec of notesState.resolved) {
+    if (sec.anchor.kind !== 'srt') continue;
+    byKey.set(`${sec.anchor.start_ms}-${sec.anchor.end_ms}`, sec);
+  }
+  blobView.querySelectorAll('.srt-cue').forEach(cueEl => {
+    const idx = Number(cueEl.getAttribute('data-bm-idx'));
+    const cue = cues[idx];
+    if (!cue) return;
+    const startMs = srtTimeToMs(cue.start);
+    const endMs = srtTimeToMs(cue.end);
+    if (startMs == null || endMs == null) return;
+    const key = `${startMs}-${endMs}`;
+    const sec = byKey.get(key);
+    const marker = document.createElement('span');
+    marker.className = 'note-marker ' + (sec ? 'has-note' : 'add-note');
+    marker.textContent = '💬';
+    marker.title = sec ? '編集' : 'メモを追加';
+    marker.onclick = (e) => {
+      e.stopPropagation();
+      if (sec) {
+        openNoteModal({ kind: 'srt', existing: sec });
+      } else {
+        const anchor = { kind: 'srt', start_ms: startMs, end_ms: endMs };
+        const snapshot = {
+          kind: 'srt', start_ms: startMs, end_ms: endMs,
+          cue_index: cue.index ? Number(cue.index) : (idx + 1),
+          text: cue.text,
+        };
+        openNoteModal({ kind: 'srt', anchor, snapshot });
+      }
+    };
+    const meta = cueEl.querySelector('.srt-meta');
+    if (meta) meta.appendChild(marker);
   });
 }
 
