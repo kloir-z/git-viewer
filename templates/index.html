@@ -1068,6 +1068,9 @@ async function showBlob(path) {
     });
     const bm = await fetchBookmark(path);
     applyBookmarkUi(blobView, bm);
+    await fetchNotes(path);
+    decorateTextNotes(blobView, path);
+    renderUnresolvedPanel(blobView);
   }
 }
 
@@ -1384,6 +1387,36 @@ async function relocateNote(oldAnchor, newAnchor, headingText) {
 function findResolvedNote(anchorMatch) {
   return notesState.resolved.find(s => anchorMatch(s.anchor));
 }
+
+function decorateTextNotes(blobView, path) {
+  const linesByStart = new Map();
+  for (const sec of notesState.resolved) {
+    if (sec.anchor.kind !== 'lines') continue;
+    linesByStart.set(sec.anchor.start, sec);
+  }
+  blobView.querySelectorAll('.code-line[data-bm-line]').forEach(line => {
+    const lineNo = Number(line.getAttribute('data-bm-line'));
+    const sec = linesByStart.get(lineNo);
+    const marker = document.createElement('span');
+    marker.className = 'note-marker ' + (sec ? 'has-note' : 'add-note');
+    marker.textContent = '💬';
+    marker.title = sec ? '編集' : 'メモを追加';
+    marker.onclick = (e) => {
+      e.stopPropagation();
+      if (sec) {
+        openNoteModal({ kind: 'lines', existing: sec });
+      } else {
+        const anchor = { kind: 'lines', start: lineNo, end: lineNo };
+        const snapshot = { kind: 'lines', start: lineNo, end: lineNo, text: line.textContent };
+        openNoteModal({ kind: 'lines', anchor, snapshot });
+      }
+    };
+    line.appendChild(marker);
+  });
+}
+
+function openNoteModal(opts) { console.log('openNoteModal', opts); }
+function renderUnresolvedPanel(blobView) {}
 
 // --- cc-nosleep keep-awake pinger ---
 (function() {
