@@ -319,3 +319,54 @@ def resolve_lines_anchor(file_text: str, anchor: dict, snapshot: dict | None) ->
         resolved=True, relocated=(best != anchor_start),
         start=best, end=best + block_size - 1,
     )
+
+
+SRT_TIME_RE = re.compile(
+    r"(\d{2}):(\d{2}):(\d{2})[,.](\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2})[,.](\d{3})"
+)
+
+
+def parse_srt_cues(text: str) -> list[dict]:
+    cues = []
+    blocks = re.split(r"\r?\n\r?\n", text.strip())
+    for block in blocks:
+        block_lines = block.splitlines()
+        if len(block_lines) < 2:
+            continue
+        idx_line = block_lines[0].strip()
+        if SRT_TIME_RE.match(idx_line):
+            time_idx = 0
+            cue_index = len(cues) + 1
+        else:
+            time_idx = 1
+            try:
+                cue_index = int(idx_line)
+            except ValueError:
+                cue_index = len(cues) + 1
+        if time_idx >= len(block_lines):
+            continue
+        m = SRT_TIME_RE.match(block_lines[time_idx])
+        if not m:
+            continue
+        start_ms = _ms(*m.group(1, 2, 3, 4))
+        end_ms = _ms(*m.group(5, 6, 7, 8))
+        text_body = "\n".join(block_lines[time_idx + 1 :]).strip()
+        cues.append({
+            "cue_index": cue_index, "start_ms": start_ms, "end_ms": end_ms, "text": text_body,
+        })
+    return cues
+
+
+@dataclass
+class SrtResolution:
+    resolved: bool
+    cue_index: int = 0
+    reason: str = ""
+
+
+def resolve_srt_anchor(cues: list[dict], anchor: dict) -> SrtResolution:
+    target = (anchor["start_ms"], anchor["end_ms"])
+    for cue in cues:
+        if (cue["start_ms"], cue["end_ms"]) == target:
+            return SrtResolution(resolved=True, cue_index=cue["cue_index"])
+    return SrtResolution(resolved=False, reason="該当タイムコードの字幕が見つからなかった")

@@ -389,3 +389,48 @@ def test_resolve_lines_no_snapshot_out_of_range():
     file_text = "a\nb\n"
     result = resolve_lines_anchor(file_text, anchor={"kind": "lines", "start": 5, "end": 6}, snapshot=None)
     assert result.resolved is False
+
+
+from notes import parse_srt_cues, resolve_srt_anchor
+
+
+SRT_SAMPLE = (
+    "1\n"
+    "00:00:01,000 --> 00:00:02,500\n"
+    "Hello\n"
+    "\n"
+    "2\n"
+    "00:00:03,000 --> 00:00:04,000\n"
+    "World\n"
+)
+
+
+def test_parse_srt_cues_basic():
+    cues = parse_srt_cues(SRT_SAMPLE)
+    assert len(cues) == 2
+    assert cues[0]["start_ms"] == 1000
+    assert cues[0]["end_ms"] == 2500
+    assert cues[0]["text"] == "Hello"
+    assert cues[0]["cue_index"] == 1
+    assert cues[1]["text"] == "World"
+
+
+def test_parse_srt_cues_handles_dot_separator():
+    src = "1\n00:00:01.000 --> 00:00:02.000\nHi\n"
+    cues = parse_srt_cues(src)
+    assert cues[0]["start_ms"] == 1000
+
+
+def test_resolve_srt_exact_match():
+    cues = parse_srt_cues(SRT_SAMPLE)
+    anchor = {"kind": "srt", "start_ms": 3000, "end_ms": 4000}
+    result = resolve_srt_anchor(cues, anchor)
+    assert result.resolved is True
+    assert result.cue_index == 2
+
+
+def test_resolve_srt_no_match():
+    cues = parse_srt_cues(SRT_SAMPLE)
+    anchor = {"kind": "srt", "start_ms": 9999, "end_ms": 10000}
+    result = resolve_srt_anchor(cues, anchor)
+    assert result.resolved is False
