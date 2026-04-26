@@ -624,18 +624,20 @@ button:hover { background: var(--border); }
 /* === File notes feature === */
 /* Marker is laid out as 16px wide but pulled back by margin-left: -16px so
    net inline advance is 0 (no gap between sentences). Emoji is right-aligned
-   inside the box, so it overlays the last ~16px of the preceding sentence. */
+   inside the box and shifted up via translateY so it overlays the upper-right
+   corner of the preceding sentence's last glyph rather than the glyph itself. */
 .note-marker {
   display: inline-block;
   width: 16px;
   margin-left: -16px;
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1;
   text-align: right;
   vertical-align: baseline;
   cursor: pointer;
   user-select: none;
   position: relative;
+  top: -0.6em;
   z-index: 1;
 }
 .note-marker.has-note { opacity: 0.5; }
