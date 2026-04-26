@@ -760,3 +760,25 @@ def test_relocate_section_not_found(app_client):
     }
     resp = client.post("/api/notes/relocate", json=payload)
     assert resp.status_code == 404
+
+
+def test_notes_index_empty(app_client):
+    client, repo = app_client
+    resp = client.get("/api/notes/index?repo=myrepo&path=")
+    assert resp.status_code == 200
+    assert resp.get_json() == {"files": {}}
+
+
+def test_notes_index_counts_sections(app_client):
+    client, repo = app_client
+    (repo / "a.py.notes.md").write_text(
+        "## L1\nx\n## L2\ny\n", encoding="utf-8")
+    (repo / "b.py.notes.md").write_text(
+        "## L1\nx\n## Unresolved\n### L99\nz\n", encoding="utf-8")
+    (repo / "sub").mkdir()
+    (repo / "sub" / "c.py.notes.md").write_text("## L1\nx\n", encoding="utf-8")
+    resp = client.get("/api/notes/index?repo=myrepo&path=")
+    body = resp.get_json()
+    assert body["files"] == {"a.py": 2, "b.py": 2}  # only top-level
+    resp2 = client.get("/api/notes/index?repo=myrepo&path=sub")
+    assert resp2.get_json()["files"] == {"c.py": 1}

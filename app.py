@@ -886,5 +886,34 @@ def notes_relocate():
     return jsonify({"mtime": notes_full.stat().st_mtime})
 
 
+@app.route("/api/notes/index")
+def notes_index():
+    name = request.args.get("repo", "")
+    path = request.args.get("path", "") or ""
+    repo_path = valid_repo(name)
+    if ".." in path:
+        abort(400)
+    base_full = (repo_path / path).resolve() if path else repo_path
+    if not str(base_full).startswith(str(repo_path.resolve())):
+        abort(403)
+    if not base_full.is_dir():
+        return jsonify({"files": {}})
+    out = {}
+    for entry in base_full.iterdir():
+        if not entry.is_file():
+            continue
+        if not entry.name.endswith(NOTES_SUFFIX):
+            continue
+        target_name = entry.name[: -len(NOTES_SUFFIX)]
+        try:
+            doc = notes_mod.load_notes(entry)
+        except OSError:
+            continue
+        count = len(doc.resolved) + len(doc.unresolved)
+        if count > 0:
+            out[target_name] = count
+    return jsonify({"files": out})
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5125, debug=False)
