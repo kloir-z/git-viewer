@@ -434,3 +434,66 @@ def test_resolve_srt_no_match():
     anchor = {"kind": "srt", "start_ms": 9999, "end_ms": 10000}
     result = resolve_srt_anchor(cues, anchor)
     assert result.resolved is False
+
+
+from notes import notes_path_for, load_notes, save_notes, upsert_section, delete_section
+
+
+def test_notes_path_for_appends_suffix():
+    from pathlib import PurePosixPath
+    assert notes_path_for(PurePosixPath("foo/bar.srt")).as_posix() == "foo/bar.srt.notes.md"
+    assert notes_path_for(PurePosixPath("README.md")).as_posix() == "README.md.notes.md"
+
+
+def test_notes_path_for_rejects_already_notes():
+    from pathlib import PurePosixPath
+    import pytest
+    with pytest.raises(ValueError):
+        notes_path_for(PurePosixPath("foo.notes.md"))
+
+
+def test_load_notes_missing_returns_empty(tmp_path):
+    p = tmp_path / "x.notes.md"
+    doc = load_notes(p)
+    assert doc.title is None
+    assert doc.resolved == []
+
+
+def test_save_then_load_roundtrip(tmp_path):
+    p = tmp_path / "x.notes.md"
+    doc = NotesDoc(title="Notes for x.py", resolved=[NotesSection(
+        anchor={"kind": "lines", "start": 1, "end": 1}, snapshot=None, body="hello")])
+    save_notes(p, doc)
+    loaded = load_notes(p)
+    assert loaded.title == doc.title
+    assert loaded.resolved[0].body == "hello"
+
+
+def test_upsert_inserts_new():
+    doc = NotesDoc()
+    sec = NotesSection(anchor={"kind": "lines", "start": 1, "end": 1}, snapshot=None, body="a")
+    upsert_section(doc, sec)
+    assert len(doc.resolved) == 1
+
+
+def test_upsert_overwrites_existing():
+    doc = NotesDoc(resolved=[NotesSection(
+        anchor={"kind": "lines", "start": 1, "end": 1}, snapshot=None, body="old")])
+    upsert_section(doc, NotesSection(
+        anchor={"kind": "lines", "start": 1, "end": 1}, snapshot=None, body="new"))
+    assert len(doc.resolved) == 1
+    assert doc.resolved[0].body == "new"
+
+
+def test_delete_removes_existing():
+    doc = NotesDoc(resolved=[NotesSection(
+        anchor={"kind": "lines", "start": 1, "end": 1}, snapshot=None, body="x")])
+    deleted = delete_section(doc, {"kind": "lines", "start": 1, "end": 1})
+    assert deleted is True
+    assert doc.resolved == []
+
+
+def test_delete_not_found():
+    doc = NotesDoc()
+    deleted = delete_section(doc, {"kind": "lines", "start": 1, "end": 1})
+    assert deleted is False

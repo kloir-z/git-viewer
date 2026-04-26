@@ -370,3 +370,49 @@ def resolve_srt_anchor(cues: list[dict], anchor: dict) -> SrtResolution:
         if (cue["start_ms"], cue["end_ms"]) == target:
             return SrtResolution(resolved=True, cue_index=cue["cue_index"])
     return SrtResolution(resolved=False, reason="該当タイムコードの字幕が見つからなかった")
+
+
+NOTES_SUFFIX = ".notes.md"
+
+
+def notes_path_for(target_path) -> Path:
+    """Given a relative target file path, return the corresponding notes path."""
+    p = Path(target_path)
+    if p.name.endswith(NOTES_SUFFIX):
+        raise ValueError("cannot create notes for a notes file")
+    return p.parent / (p.name + NOTES_SUFFIX)
+
+
+def load_notes(path) -> NotesDoc:
+    p = Path(path)
+    if not p.is_file():
+        return NotesDoc()
+    text = p.read_text(encoding="utf-8")
+    return parse_notes_md(text)
+
+
+def save_notes(path, doc: NotesDoc) -> None:
+    text = serialize_notes_md(doc)
+    atomic_write_text(Path(path), text)
+
+
+def upsert_section(doc: NotesDoc, section: NotesSection) -> None:
+    key = _anchor_key(section.anchor)
+    for i, existing in enumerate(doc.resolved):
+        if _anchor_key(existing.anchor) == key:
+            doc.resolved[i] = section
+            return
+    doc.resolved.append(section)
+
+
+def delete_section(doc: NotesDoc, anchor: dict) -> bool:
+    key = _anchor_key(anchor)
+    for i, existing in enumerate(doc.resolved):
+        if _anchor_key(existing.anchor) == key:
+            doc.resolved.pop(i)
+            return True
+    for i, existing in enumerate(doc.unresolved):
+        if _anchor_key(existing.anchor) == key:
+            doc.unresolved.pop(i)
+            return True
+    return False
