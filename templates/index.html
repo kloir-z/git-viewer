@@ -1295,6 +1295,96 @@ function setupPlaybackLog(audioPath) {
 
 init();
 
+// === File notes feature ===
+let notesState = { path: null, mtime: null, kind: null, resolved: [], unresolved: [] };
+
+async function fetchNotes(path) {
+  const url = `/api/notes?repo=${encodeURIComponent(currentRepo)}&path=${encodeURIComponent(path)}`;
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    notesState = {
+      path,
+      mtime: data.mtime,
+      kind: data.kind,
+      resolved: data.resolved || [],
+      unresolved: data.unresolved || [],
+    };
+    return notesState;
+  } catch (e) {
+    notesState = { path, mtime: null, kind: null, resolved: [], unresolved: [] };
+    console.warn('fetchNotes failed', e);
+    return notesState;
+  }
+}
+
+async function putNote(anchor, snapshot, body) {
+  const payload = {
+    repo: currentRepo, path: notesState.path,
+    if_match_mtime: notesState.mtime,
+    anchor, snapshot, body,
+  };
+  const resp = await fetch('/api/notes', {
+    method: 'PUT', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload),
+  });
+  if (resp.status === 409) {
+    alert('他で更新されたためメモを保存できませんでした。再読込してやり直してください。');
+    return null;
+  }
+  if (!resp.ok) {
+    alert('メモの保存に失敗しました');
+    return null;
+  }
+  const data = await resp.json();
+  notesState.mtime = data.mtime;
+  return data;
+}
+
+async function deleteNote(anchor) {
+  const payload = {
+    repo: currentRepo, path: notesState.path,
+    if_match_mtime: notesState.mtime,
+    anchor,
+  };
+  const resp = await fetch('/api/notes', {
+    method: 'DELETE', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload),
+  });
+  if (resp.status === 409) {
+    alert('他で更新されたためメモを削除できませんでした。');
+    return null;
+  }
+  if (!resp.ok) {
+    alert('メモの削除に失敗しました');
+    return null;
+  }
+  const data = await resp.json();
+  notesState.mtime = data.mtime;
+  return data;
+}
+
+async function relocateNote(oldAnchor, newAnchor, headingText) {
+  const payload = {
+    repo: currentRepo, path: notesState.path,
+    if_match_mtime: notesState.mtime,
+    old_anchor: oldAnchor, new_anchor: newAnchor, new_heading_text: headingText,
+  };
+  const resp = await fetch('/api/notes/relocate', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload),
+  });
+  if (!resp.ok) return null;
+  const data = await resp.json();
+  notesState.mtime = data.mtime;
+  return data;
+}
+
+function findResolvedNote(anchorMatch) {
+  return notesState.resolved.find(s => anchorMatch(s.anchor));
+}
+
 // --- cc-nosleep keep-awake pinger ---
 (function() {
   const KEEP_AWAKE_INTERVAL_MS = 20000;
