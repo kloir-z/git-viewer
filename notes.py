@@ -191,3 +191,40 @@ def _anchor_key(anchor: dict) -> tuple:
     if kind == "srt":
         return ("srt", anchor["start_ms"], anchor["end_ms"])
     return (kind,)
+
+
+def _sort_key(anchor: dict):
+    kind = anchor["kind"]
+    if kind == "lines":
+        return (0, anchor["start"], anchor["end"])
+    if kind == "md_sentence":
+        return (0, anchor["index"], 0)
+    if kind == "srt":
+        return (0, anchor["start_ms"], anchor["end_ms"])
+    return (1, 0, 0)
+
+
+def serialize_notes_md(doc: NotesDoc) -> str:
+    parts = []
+    if doc.title:
+        parts.append(f"# {doc.title}\n")
+
+    for sec in sorted(doc.resolved, key=lambda s: _sort_key(s.anchor)):
+        parts.append(_serialize_section(sec, level=2))
+
+    if doc.unresolved:
+        parts.append("\n## Unresolved\n")
+        for sec in sorted(doc.unresolved, key=lambda s: _sort_key(s.anchor)):
+            parts.append(_serialize_section(sec, level=3))
+
+    return "".join(parts)
+
+
+def _serialize_section(sec: NotesSection, level: int) -> str:
+    prefix = "##" if level == 2 else "###"
+    out = [f"\n{prefix} {format_anchor_heading(sec.anchor)}\n"]
+    if sec.snapshot is not None:
+        out.append(f"\n{encode_snapshot(sec.snapshot)}\n")
+    if sec.body:
+        out.append(f"\n{sec.body.rstrip()}\n")
+    return "".join(out)

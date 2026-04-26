@@ -210,3 +210,89 @@ def test_parse_duplicate_anchor_first_wins():
     doc = parse_notes_md(md)
     assert len(doc.resolved) == 1
     assert "first" in doc.resolved[0].body
+
+
+from notes import serialize_notes_md, NotesDoc, NotesSection
+
+
+def test_serialize_empty():
+    doc = NotesDoc(title="Notes for foo.py")
+    out = serialize_notes_md(doc)
+    assert out == "# Notes for foo.py\n"
+
+
+def test_serialize_one_lines_section():
+    doc = NotesDoc(
+        title="Notes for foo.py",
+        resolved=[NotesSection(
+            anchor={"kind": "lines", "start": 10, "end": 15},
+            snapshot={"kind": "lines", "start": 10, "end": 15, "text": "x"},
+            body="メモ",
+        )],
+    )
+    out = serialize_notes_md(doc)
+    assert "# Notes for foo.py" in out
+    assert "## L10-15" in out
+    assert '<!--snapshot:{"kind":"lines"' in out
+    assert "メモ" in out
+
+
+def test_serialize_sort_order_lines():
+    doc = NotesDoc(
+        title="t",
+        resolved=[
+            NotesSection(anchor={"kind": "lines", "start": 30, "end": 30}, snapshot=None, body="c"),
+            NotesSection(anchor={"kind": "lines", "start": 10, "end": 10}, snapshot=None, body="a"),
+            NotesSection(anchor={"kind": "lines", "start": 20, "end": 20}, snapshot=None, body="b"),
+        ],
+    )
+    out = serialize_notes_md(doc)
+    pos_a = out.index("## L10")
+    pos_b = out.index("## L20")
+    pos_c = out.index("## L30")
+    assert pos_a < pos_b < pos_c
+
+
+def test_serialize_unresolved_section_after_resolved():
+    doc = NotesDoc(
+        title="t",
+        resolved=[NotesSection(anchor={"kind": "lines", "start": 1, "end": 1}, snapshot=None, body="r")],
+        unresolved=[NotesSection(anchor={"kind": "lines", "start": 99, "end": 99}, snapshot=None, body="u")],
+    )
+    out = serialize_notes_md(doc)
+    assert out.index("## L1") < out.index("## Unresolved")
+    assert out.index("## Unresolved") < out.index("### L99")
+
+
+def test_serialize_parse_roundtrip():
+    original = NotesDoc(
+        title="Notes for foo.py",
+        resolved=[
+            NotesSection(
+                anchor={"kind": "lines", "start": 10, "end": 15},
+                snapshot={"kind": "lines", "start": 10, "end": 15, "text": "x\ny"},
+                body="本文1\n本文2",
+            ),
+            NotesSection(
+                anchor={"kind": "srt", "start_ms": 1000, "end_ms": 2000},
+                snapshot={"kind": "srt", "start_ms": 1000, "end_ms": 2000, "cue_index": 1, "text": "字幕"},
+                body="srt メモ",
+            ),
+        ],
+        unresolved=[
+            NotesSection(
+                anchor={"kind": "lines", "start": 99, "end": 99},
+                snapshot={"kind": "lines", "start": 99, "end": 99, "text": "z"},
+                body="未解決理由: foo\n本文",
+            ),
+        ],
+    )
+    text = serialize_notes_md(original)
+    parsed = parse_notes_md(text)
+    assert parsed.title == original.title
+    assert len(parsed.resolved) == 2
+    assert parsed.resolved[0].anchor == original.resolved[0].anchor
+    assert parsed.resolved[0].snapshot == original.resolved[0].snapshot
+    assert parsed.resolved[0].body == original.resolved[0].body
+    assert len(parsed.unresolved) == 1
+    assert parsed.unresolved[0].anchor == original.unresolved[0].anchor
