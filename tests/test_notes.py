@@ -668,3 +668,54 @@ def test_get_notes_md_returns_client_resolve_flag(app_client):
     body = resp.get_json()
     assert body["kind"] == "md_sentence"
     assert body["resolved"][0]["client_resolve"] is True
+
+
+def test_delete_notes_removes_section(app_client):
+    client, repo = app_client
+    (repo / "foo.py").write_text("a\nb\n", encoding="utf-8")
+    notes_path = repo / "foo.py.notes.md"
+    initial = (
+        "## L1\nfirst\n"
+        "## L2\nsecond\n"
+    )
+    notes_path.write_text(initial, encoding="utf-8")
+    payload = {
+        "repo": "myrepo", "path": "foo.py",
+        "if_match_mtime": notes_path.stat().st_mtime,
+        "anchor": {"kind": "lines", "start": 1, "end": 1},
+    }
+    resp = client.delete("/api/notes", json=payload)
+    assert resp.status_code == 200
+    text = notes_path.read_text(encoding="utf-8")
+    assert "first" not in text
+    assert "second" in text
+
+
+def test_delete_last_section_removes_file(app_client):
+    client, repo = app_client
+    (repo / "foo.py").write_text("a\n", encoding="utf-8")
+    notes_path = repo / "foo.py.notes.md"
+    notes_path.write_text("## L1\nbody\n", encoding="utf-8")
+    payload = {
+        "repo": "myrepo", "path": "foo.py",
+        "if_match_mtime": notes_path.stat().st_mtime,
+        "anchor": {"kind": "lines", "start": 1, "end": 1},
+    }
+    resp = client.delete("/api/notes", json=payload)
+    assert resp.status_code == 200
+    assert resp.get_json()["mtime"] is None
+    assert not notes_path.exists()
+
+
+def test_delete_notes_mtime_conflict(app_client):
+    client, repo = app_client
+    (repo / "foo.py").write_text("a\n", encoding="utf-8")
+    notes_path = repo / "foo.py.notes.md"
+    notes_path.write_text("## L1\nbody\n", encoding="utf-8")
+    payload = {
+        "repo": "myrepo", "path": "foo.py",
+        "if_match_mtime": 0.0,
+        "anchor": {"kind": "lines", "start": 1, "end": 1},
+    }
+    resp = client.delete("/api/notes", json=payload)
+    assert resp.status_code == 409

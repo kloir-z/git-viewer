@@ -811,5 +811,37 @@ def notes_put():
     return jsonify({"mtime": notes_full.stat().st_mtime})
 
 
+@app.route("/api/notes", methods=["DELETE"])
+def notes_delete():
+    data = request.get_json(silent=True) or {}
+    name = data.get("repo", "")
+    path = data.get("path", "")
+    anchor = data.get("anchor")
+    if_match = data.get("if_match_mtime", None)
+    if not _validate_anchor(anchor):
+        abort(400)
+    repo_path = valid_repo(name)
+    if not path or ".." in path or path.endswith(NOTES_SUFFIX):
+        abort(400)
+    target_full = (repo_path / path).resolve()
+    if not str(target_full).startswith(str(repo_path.resolve())):
+        abort(403)
+    notes_full = target_full.parent / (target_full.name + NOTES_SUFFIX)
+    if not notes_full.is_file():
+        return jsonify({"mtime": None})
+    if not _check_mtime(notes_full, if_match):
+        abort(409)
+    doc = notes_mod.load_notes(notes_full)
+    notes_mod.delete_section(doc, anchor)
+    if not doc.resolved and not doc.unresolved:
+        try:
+            notes_full.unlink()
+        except OSError:
+            pass
+        return jsonify({"mtime": None})
+    notes_mod.save_notes(notes_full, doc)
+    return jsonify({"mtime": notes_full.stat().st_mtime})
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5125, debug=False)
