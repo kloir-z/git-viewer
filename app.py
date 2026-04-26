@@ -3,6 +3,7 @@ import mimetypes
 import os
 import re
 import subprocess
+import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -27,7 +28,22 @@ def load_code_dir() -> Path:
     return Path("/home/user/code")
 
 
+def load_keep_awake_script():
+    if sys.platform != "win32" or not CONFIG_FILE.is_file():
+        return None
+    try:
+        config = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+    raw = config.get("keep_awake_script")
+    if not raw:
+        return None
+    path = Path(raw)
+    return path if path.is_file() else None
+
+
 CODE_DIR = load_code_dir()
+KEEP_AWAKE_SCRIPT = load_keep_awake_script()
 FAVORITES_FILE = Path(__file__).parent / "favorites.json"
 
 
@@ -554,6 +570,47 @@ def playback_log_add():
     with open(log_file, "a", encoding="utf-8") as f:
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
     return jsonify({"ok": True})
+
+
+@app.route("/api/keep-awake", methods=["POST"])
+def keep_awake():
+    if KEEP_AWAKE_SCRIPT is None:
+        return ("", 204)
+    data = request.get_json(silent=True) or {}
+    client_id = data.get("client_id", "")
+    if not re.fullmatch(r"[A-Za-z0-9-]{1,64}", client_id):
+        abort(400)
+    session_id = f"git-viewer-{client_id}"
+    payload = json.dumps({"session_id": session_id}).encode("utf-8")
+    creationflags = (
+        subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP
+    )
+    try:
+        proc = subprocess.Popen(
+            [
+                "powershell.exe",
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                str(KEEP_AWAKE_SCRIPT),
+                "-Minutes",
+                "2",
+            ],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=creationflags,
+        )
+        try:
+            proc.communicate(input=payload, timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.communicate()
+            app.logger.warning("keep-awake.ps1 hung, killed")
+    except (OSError, BrokenPipeError):
+        app.logger.warning("keep-awake.ps1 spawn failed", exc_info=True)
+    return ("", 204)
 
 
 if __name__ == "__main__":

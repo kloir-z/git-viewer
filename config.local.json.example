@@ -1,3 +1,4 @@
 {
-  "code_dir": "C:/code"
+  "code_dir": "C:/code",
+  "keep_awake_script": "C:/code/cc-nosleep/scripts/keep-awake.ps1"
 }

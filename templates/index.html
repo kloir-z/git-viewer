@@ -1294,6 +1294,39 @@ function setupPlaybackLog(audioPath) {
 })();
 
 init();
+
+// --- cc-nosleep keep-awake pinger ---
+(function() {
+  const KEEP_AWAKE_INTERVAL_MS = 20000;
+  let clientId = sessionStorage.getItem('keepAwakeClientId');
+  if (!clientId) {
+    clientId = 'c' + Math.random().toString(16).slice(2, 10);
+    sessionStorage.setItem('keepAwakeClientId', clientId);
+  }
+
+  function shouldKeepAwake() {
+    const audio = document.getElementById('audio-player');
+    const audioPlaying = audio && !audio.paused;
+    return audioPlaying || document.visibilityState === 'visible';
+  }
+
+  function ping() {
+    if (!shouldKeepAwake()) return;
+    fetch('/api/keep-awake', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ client_id: clientId }),
+      keepalive: true,
+    }).catch(() => {});
+  }
+
+  setInterval(ping, KEEP_AWAKE_INTERVAL_MS);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') ping();
+  });
+  document.addEventListener('play', ping, true);
+  ping();
+})();
 </script>
 
 </body>
