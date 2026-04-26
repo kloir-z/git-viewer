@@ -1620,7 +1620,38 @@ async function reloadCurrentBlob() {
   }
 }
 
-function renderUnresolvedPanel(blobView) {}
+function renderUnresolvedPanel(blobView) {
+  blobView.querySelectorAll('.unresolved-panel').forEach(p => p.remove());
+  if (!notesState.unresolved.length) return;
+
+  const panel = document.createElement('details');
+  panel.className = 'unresolved-panel';
+  panel.open = true;
+  const summary = document.createElement('summary');
+  summary.textContent = `未解決メモ (${notesState.unresolved.length})`;
+  panel.appendChild(summary);
+
+  for (const sec of notesState.unresolved) {
+    const item = document.createElement('div');
+    item.className = 'unresolved-item';
+    const anchorLabel = formatAnchorLabel(sec.anchor);
+    const reason = sec.reason || '理由不明';
+    item.innerHTML = `
+      <div class="anchor">${esc(anchorLabel)}</div>
+      <div class="reason">${esc(reason)}</div>
+      <div class="body">${esc(sec.body || '')}</div>
+      <div class="actions">
+        <button class="btn-delete-unresolved">削除</button>
+      </div>`;
+    item.querySelector('.btn-delete-unresolved').onclick = async () => {
+      if (!confirm('この未解決メモを削除しますか？')) return;
+      await deleteNote(sec.anchor);
+      await reloadCurrentBlob();
+    };
+    panel.appendChild(item);
+  }
+  blobView.appendChild(panel);
+}
 
 // --- cc-nosleep keep-awake pinger ---
 (function() {
