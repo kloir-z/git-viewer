@@ -116,17 +116,24 @@ def keep_awake():
         abort(400)
     session_id = f"git-viewer-{client_id}"
     payload = json.dumps({"session_id": session_id}).encode("utf-8")
+    creationflags = (
+        subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP
+    )
     try:
         proc = subprocess.Popen(
             ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass",
              "-File", str(KEEP_AWAKE_SCRIPT), "-Minutes", "2"],
             stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            creationflags=creationflags,
         )
-        proc.stdin.write(payload)
-        proc.stdin.close()
-        # 待たない (fire-and-forget): keep-awake.ps1 自身は数十ms で終わる
-    except OSError:
-        # 起動失敗はログのみ。フロントの再生は止めない
+        try:
+            proc.communicate(input=payload, timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.communicate()
+            app.logger.warning("keep-awake.ps1 hung, killed")
+    except (OSError, BrokenPipeError):
+        # 起動失敗 / 子プロセス即死はログのみ。フロントの再生は止めない
         app.logger.warning("keep-awake.ps1 spawn failed", exc_info=True)
     return ("", 204)
 ```
@@ -155,12 +162,16 @@ def keep_awake():
 - ページロード時に **グローバルに 1 度だけ** `setInterval(tick, 20000)` を起動。再生成しない (audio 要素切り替えに連動させない)
 - tick 内で毎回 `document.getElementById('audio-player')` を取り直す。要素が無い or `.paused === true` なら audio 条件 false
 - `document.addEventListener('visibilitychange', ...)` で hidden→visible 時に即 1 回 ping
-- audio に対しては bubbling phase の `play` イベントを `document.addEventListener('play', ..., true)` で拾う。これも即 ping
+- audio の `play` イベントは `<audio>` から bubble するので `document.addEventListener('play', ..., true)` (capturing phase) で拾う。capturing にしているのは念のためで、bubbling だけでも動く。これも即 ping
 - `fetch('/api/keep-awake', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({client_id})}).catch(() => {})` で失敗は黙殺
 
 #### audio 要素の動的な差し替え
 
-`templates/index.html` の `selectFile` 内でファイルを切り替えるたびに `<audio id="audio-player">` を含む HTML を innerHTML で再生成する箇所がある。pinger は audio 要素に直接 listener を貼らず、tick ごとに `document.getElementById('audio-player')` を取り直して `.paused` を見る方式にすることで、要素差し替えの影響を受けない。`play` イベントは `document` の capturing phase で拾うので audio 要素差し替えにも追随する。
+`templates/index.html` の `selectFile` 内でファイルを切り替えるたびに `<audio id="audio-player">` を含む HTML を innerHTML で再生成する箇所がある。pinger は audio 要素に直接 listener を貼らず、tick ごとに `document.getElementById('audio-player')` を取り直して `.paused` を見る方式にすることで、要素差し替えの影響を受けない。`play` イベントは `<audio>` から `document` まで bubble するので、document 側で listen していれば audio 要素差し替えにも追随する。
+
+### release-awake.ps1 を呼ばない理由
+
+ブラウザにはタブ閉じ・iPhone のアプリスイッチ等を確実に通知できる手段が無い (`beforeunload` / `pagehide` は iOS Safari でバックグラウンド遷移と区別できない)。半端な release 通知は「音声再生中なのにスリープ抑止が外れる」事故を生むので、**TTL 自然 expire のみに頼る**。最悪 2 分間の余分な抑止が発生するが、これは設計上許容する。
 
 ## エッジケース
 
