@@ -296,3 +296,32 @@ def test_serialize_parse_roundtrip():
     assert parsed.resolved[0].body == original.resolved[0].body
     assert len(parsed.unresolved) == 1
     assert parsed.unresolved[0].anchor == original.unresolved[0].anchor
+
+
+from notes import atomic_write_text
+
+
+def test_atomic_write_creates_file(tmp_path):
+    target = tmp_path / "out.md"
+    atomic_write_text(target, "hello")
+    assert target.read_text(encoding="utf-8") == "hello"
+
+
+def test_atomic_write_overwrites(tmp_path):
+    target = tmp_path / "out.md"
+    target.write_text("old", encoding="utf-8")
+    atomic_write_text(target, "new")
+    assert target.read_text(encoding="utf-8") == "new"
+
+
+def test_atomic_write_creates_parent(tmp_path):
+    target = tmp_path / "sub" / "out.md"
+    atomic_write_text(target, "x")
+    assert target.read_text(encoding="utf-8") == "x"
+
+
+def test_atomic_write_no_temp_left_behind(tmp_path):
+    target = tmp_path / "out.md"
+    atomic_write_text(target, "x")
+    leftovers = [p for p in tmp_path.iterdir() if p.name != "out.md"]
+    assert leftovers == []
