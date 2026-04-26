@@ -1557,7 +1557,69 @@ function decorateMdNotes(blobView) {
   }
 }
 
-function openNoteModal(opts) { console.log('openNoteModal', opts); }
+function openNoteModal(opts) {
+  const isEdit = !!opts.existing;
+  const anchor = isEdit ? opts.existing.anchor : opts.anchor;
+  const snapshot = isEdit ? opts.existing.snapshot : opts.snapshot;
+  const initialBody = isEdit ? opts.existing.body : '';
+  const anchorLabel = formatAnchorLabel(anchor);
+
+  const backdrop = document.createElement('div');
+  backdrop.className = 'note-modal-backdrop';
+  backdrop.innerHTML = `
+    <div class="note-modal" onclick="event.stopPropagation()">
+      <h3>${isEdit ? 'メモを編集' : 'メモを追加'}</h3>
+      <div class="note-modal-anchor">${esc(anchorLabel)}</div>
+      <textarea class="note-body"></textarea>
+      <div class="note-modal-actions">
+        ${isEdit ? '<button class="btn-delete">削除</button>' : ''}
+        <button class="btn-cancel">キャンセル</button>
+        <button class="btn-save">保存</button>
+      </div>
+    </div>`;
+  document.body.appendChild(backdrop);
+  const textarea = backdrop.querySelector('.note-body');
+  textarea.value = initialBody;
+  textarea.focus();
+
+  const close = () => backdrop.remove();
+  backdrop.onclick = close;
+  backdrop.querySelector('.btn-cancel').onclick = close;
+  backdrop.querySelector('.btn-save').onclick = async () => {
+    const body = textarea.value;
+    const result = await putNote(anchor, snapshot, body);
+    if (result) {
+      close();
+      await reloadCurrentBlob();
+    }
+  };
+  if (isEdit) {
+    backdrop.querySelector('.btn-delete').onclick = async () => {
+      if (!confirm('このメモを削除しますか？')) return;
+      const result = await deleteNote(anchor);
+      if (result !== null) {
+        close();
+        await reloadCurrentBlob();
+      }
+    };
+  }
+}
+
+function formatAnchorLabel(a) {
+  if (a.kind === 'lines') {
+    return a.start === a.end ? `L${a.start}` : `L${a.start}-${a.end}`;
+  }
+  if (a.kind === 'md_sentence') return `S${a.index}`;
+  if (a.kind === 'srt') return `${srtMsToTime(a.start_ms)} --> ${srtMsToTime(a.end_ms)}`;
+  return JSON.stringify(a);
+}
+
+async function reloadCurrentBlob() {
+  if (notesState.path) {
+    await showBlob(notesState.path);
+  }
+}
+
 function renderUnresolvedPanel(blobView) {}
 
 // --- cc-nosleep keep-awake pinger ---
