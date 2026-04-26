@@ -620,3 +620,89 @@ button:hover { background: var(--border); }
   border-left-width: 6px;
   box-shadow: 0 0 0 1px var(--speaker-color, var(--border)) inset;
 }
+
+/* === File notes feature === */
+.note-marker {
+  display: inline-block;
+  margin-left: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  vertical-align: middle;
+  user-select: none;
+  opacity: 0.85;
+}
+.note-marker:hover { opacity: 1; }
+.note-marker.has-note { color: #f0c04a; }
+.note-marker.add-note { color: #6e7681; opacity: 0; }
+.code-line:hover .note-marker.add-note,
+.bm-target:hover .note-marker.add-note,
+.srt-cue:hover .note-marker.add-note { opacity: 0.6; }
+
+.notes-badge {
+  display: inline-block;
+  margin-left: 4px;
+  font-size: 10px;
+  color: #f0c04a;
+  background: rgba(240, 192, 74, 0.12);
+  border: 1px solid rgba(240, 192, 74, 0.4);
+  border-radius: 3px;
+  padding: 0 4px;
+  line-height: 14px;
+  vertical-align: middle;
+}
+
+.note-modal-backdrop {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 1000;
+}
+.note-modal {
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  width: min(640px, 90vw);
+  max-height: 80vh;
+  display: flex; flex-direction: column;
+  padding: 16px;
+  gap: 8px;
+}
+.note-modal h3 { margin: 0; font-size: 14px; color: #c9d1d9; }
+.note-modal-anchor {
+  font-family: monospace; font-size: 11px; color: #8b949e;
+  background: #0d1117; padding: 4px 6px; border-radius: 3px;
+}
+.note-modal textarea {
+  flex: 1; min-height: 200px; font-family: monospace; font-size: 13px;
+  background: #0d1117; color: #c9d1d9; border: 1px solid #30363d;
+  border-radius: 3px; padding: 8px; resize: vertical;
+}
+.note-modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.note-modal-actions button {
+  padding: 4px 12px; border-radius: 3px; border: 1px solid #30363d;
+  background: #21262d; color: #c9d1d9; cursor: pointer;
+}
+.note-modal-actions button.btn-save { background: #238636; border-color: #2ea043; }
+.note-modal-actions button.btn-delete { background: #da3633; border-color: #f85149; }
+
+.unresolved-panel {
+  margin-top: 16px;
+  padding: 8px;
+  border: 1px solid #30363d;
+  border-radius: 4px;
+  background: #161b22;
+}
+.unresolved-panel summary {
+  cursor: pointer; color: #f0c04a; font-weight: 600; font-size: 13px;
+}
+.unresolved-item {
+  margin-top: 8px; padding: 8px; background: #0d1117;
+  border-left: 3px solid #f0c04a; border-radius: 3px;
+}
+.unresolved-item .anchor {
+  font-family: monospace; font-size: 11px; color: #8b949e;
+}
+.unresolved-item .reason { font-size: 11px; color: #f85149; margin-top: 2px; }
+.unresolved-item .body { margin-top: 6px; white-space: pre-wrap; }
+.unresolved-item .actions { margin-top: 6px; display: flex; gap: 6px; }
