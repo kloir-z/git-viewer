@@ -410,6 +410,7 @@ async function renderFiles(path) {
     </div>
     <div id="blob-view"></div>
   `;
+  decorateNotesBadges();
 }
 
 function buildBreadcrumb(path) {
@@ -1617,6 +1618,30 @@ function formatAnchorLabel(a) {
 async function reloadCurrentBlob() {
   if (notesState.path) {
     await showBlob(notesState.path);
+  }
+}
+
+async function decorateNotesBadges() {
+  const url = `/api/notes/index?repo=${encodeURIComponent(currentRepo)}&path=${encodeURIComponent(currentPath)}`;
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) return;
+    const data = await resp.json();
+    const counts = data.files || {};
+    document.querySelectorAll('#content .list-row').forEach(row => {
+      const nameSpan = row.querySelector('span:nth-child(2)');
+      if (!nameSpan) return;
+      const name = nameSpan.textContent;
+      const count = counts[name];
+      if (count) {
+        const badge = document.createElement('span');
+        badge.className = 'notes-badge';
+        badge.textContent = `💬${count}`;
+        nameSpan.appendChild(badge);
+      }
+    });
+  } catch (e) {
+    console.warn('decorateNotesBadges failed', e);
   }
 }
 
