@@ -719,3 +719,44 @@ def test_delete_notes_mtime_conflict(app_client):
     }
     resp = client.delete("/api/notes", json=payload)
     assert resp.status_code == 409
+
+
+def test_relocate_md_section(app_client):
+    client, repo = app_client
+    (repo / "doc.md").write_text("hello\n", encoding="utf-8")
+    notes_path = repo / "doc.md.notes.md"
+    initial = (
+        "## S5 \"old text\"\n"
+        '<!--snapshot:{"kind":"md_sentence","index":5,"text":"hello"}-->\n'
+        "メモ\n"
+    )
+    notes_path.write_text(initial, encoding="utf-8")
+    payload = {
+        "repo": "myrepo", "path": "doc.md",
+        "if_match_mtime": notes_path.stat().st_mtime,
+        "old_anchor": {"kind": "md_sentence", "index": 5},
+        "new_anchor": {"kind": "md_sentence", "index": 3},
+        "new_heading_text": "hello",
+    }
+    resp = client.post("/api/notes/relocate", json=payload)
+    assert resp.status_code == 200
+    text = notes_path.read_text(encoding="utf-8")
+    assert "## S3 \"hello\"" in text
+    assert "S5" not in text
+    assert "メモ" in text
+
+
+def test_relocate_section_not_found(app_client):
+    client, repo = app_client
+    (repo / "doc.md").write_text("x\n", encoding="utf-8")
+    notes_path = repo / "doc.md.notes.md"
+    notes_path.write_text("## S1\nbody\n", encoding="utf-8")
+    payload = {
+        "repo": "myrepo", "path": "doc.md",
+        "if_match_mtime": notes_path.stat().st_mtime,
+        "old_anchor": {"kind": "md_sentence", "index": 99},
+        "new_anchor": {"kind": "md_sentence", "index": 1},
+        "new_heading_text": "x",
+    }
+    resp = client.post("/api/notes/relocate", json=payload)
+    assert resp.status_code == 404
