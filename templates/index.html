@@ -924,7 +924,7 @@ async function showBlob(path) {
   const fileName = path.split('/').pop();
 
   // Binary files — show download link only
-  if (!IMAGE_EXTS.includes(ext) && !PDF_EXTS.includes(ext) && !AUDIO_EXTS.includes(ext) && !TEXT_EXTS.includes(ext) && ext !== '') {
+  if (!IMAGE_EXTS.includes(ext) && !PDF_EXTS.includes(ext) && !AUDIO_EXTS.includes(ext) && !VIDEO_EXTS.includes(ext) && !TEXT_EXTS.includes(ext) && ext !== '') {
     blobView.innerHTML = `
       <div class="section-header" style="margin-top:8px;">${esc(path)}${copyPathBtn(path)}</div>
       <div class="diff-empty">バイナリファイル — <a href="${blobUrl}" download style="color:var(--accent);">ダウンロード</a></div>`;
@@ -938,6 +938,20 @@ async function showBlob(path) {
       <div class="blob-container" style="text-align:center;padding:8px;">
         <img src="${blobUrl}" alt="${esc(fileName)}" style="max-width:100%;height:auto;">
       </div>`;
+    return;
+  }
+
+  // Video
+  if (VIDEO_EXTS.includes(ext)) {
+    blobView.innerHTML = `
+      <div class="section-header" style="margin-top:8px;">${esc(path)}${copyPathBtn(path)}</div>
+      <div class="blob-container" style="padding:8px;">
+        <video id="audio-player" controls preload="metadata" src="${blobUrl}" style="width:100%; max-height:70vh; background:#000;"></video>
+        <div id="playback-log-list" class="playback-log"></div>
+        <div id="srt-embed" class="srt-embed-container"></div>
+      </div>`;
+    setupPlaybackLog(path);
+    setupSrtEmbed(path);
     return;
   }
 
