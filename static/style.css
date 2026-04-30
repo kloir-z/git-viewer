@@ -730,6 +730,9 @@ button:hover { background: var(--border); }
   font-family: monospace; font-size: 11px; color: #8b949e;
   background: #0d1117; padding: 4px 6px; border-radius: 3px;
 }
+.note-ts {
+  font-size: 10px; color: #6e7681; margin-top: -4px;
+}
 .note-modal textarea {
   flex: 1; min-height: 200px; font-family: monospace; font-size: 13px;
   background: #0d1117; color: #c9d1d9; border: 1px solid #30363d;

@@ -33,6 +33,15 @@ def test_encode_multiline_text_is_serialized_as_escaped_newline():
     assert "\n" not in s
 
 
+def test_encode_decode_roundtrip_with_timestamps():
+    snap = {
+        "kind": "lines", "start": 1, "end": 1, "text": "x",
+        "created_at": "2026-04-30T10:00:00+09:00",
+        "updated_at": "2026-04-30T11:30:00+09:00",
+    }
+    assert decode_snapshot(encode_snapshot(snap)) == snap
+
+
 from notes import parse_anchor_heading, format_anchor_heading
 
 

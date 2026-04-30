@@ -5,6 +5,7 @@ import re
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 from pathlib import Path
 
 import notes as notes_mod
@@ -705,7 +706,25 @@ def _validate_snapshot(s):
         return False
     if isinstance(s.get("text"), str) and len(s["text"]) > SNAPSHOT_TEXT_LIMIT:
         return False
+    for k in ("created_at", "updated_at"):
+        if k in s and not isinstance(s[k], str):
+            return False
     return True
+
+
+def _now_iso() -> str:
+    return datetime.now().astimezone().isoformat(timespec="seconds")
+
+
+def _find_section_by_anchor(doc, anchor):
+    key = notes_mod._anchor_key(anchor)
+    for sec in doc.resolved:
+        if notes_mod._anchor_key(sec.anchor) == key:
+            return sec
+    for sec in doc.unresolved:
+        if notes_mod._anchor_key(sec.anchor) == key:
+            return sec
+    return None
 
 
 def _check_mtime(notes_full, expected):
@@ -803,6 +822,16 @@ def notes_put():
         doc = notes_mod.NotesDoc(title=f"Notes for {target_full.name}")
     if doc.title is None:
         doc.title = f"Notes for {target_full.name}"
+
+    if isinstance(snapshot, dict):
+        now = _now_iso()
+        existing = _find_section_by_anchor(doc, anchor)
+        prior_created = None
+        if existing is not None and isinstance(existing.snapshot, dict):
+            prior_created = existing.snapshot.get("created_at")
+        snapshot = dict(snapshot)
+        snapshot["created_at"] = prior_created if isinstance(prior_created, str) else now
+        snapshot["updated_at"] = now
 
     section = notes_mod.NotesSection(anchor=anchor, snapshot=snapshot, body=body)
     notes_mod.upsert_section(doc, section)

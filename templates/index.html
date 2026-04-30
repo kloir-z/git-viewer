@@ -1622,6 +1622,7 @@ function openNoteModal(opts) {
     <div class="note-modal" onclick="event.stopPropagation()">
       <h3>${isEdit ? 'メモを編集' : 'メモを追加'}</h3>
       <div class="note-modal-anchor">${esc(anchorLabel)}</div>
+      ${noteTimestampHtml(snapshot)}
       <textarea class="note-body"></textarea>
       <div class="note-modal-actions">
         ${isEdit ? '<button class="btn-delete">削除</button>' : ''}
@@ -1664,6 +1665,24 @@ function formatAnchorLabel(a) {
   if (a.kind === 'md_sentence') return `S${a.index}`;
   if (a.kind === 'srt') return `${srtMsToTime(a.start_ms)} --> ${srtMsToTime(a.end_ms)}`;
   return JSON.stringify(a);
+}
+
+function formatNoteTs(iso) {
+  if (typeof iso !== 'string' || !iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function noteTimestampHtml(snapshot) {
+  if (!snapshot) return '';
+  const c = formatNoteTs(snapshot.created_at);
+  const u = formatNoteTs(snapshot.updated_at);
+  if (!c && !u) return '';
+  if (c && u && c !== u) return `<div class="note-ts">作成 ${esc(c)} · 更新 ${esc(u)}</div>`;
+  const t = c || u;
+  return `<div class="note-ts">作成 ${esc(t)}</div>`;
 }
 
 async function reloadCurrentBlob() {
@@ -1767,6 +1786,7 @@ function renderUnresolvedPanel(blobView) {
     item.innerHTML = `
       <div class="anchor">${esc(anchorLabel)}</div>
       <div class="reason">${esc(reason)}</div>
+      ${noteTimestampHtml(sec.snapshot)}
       <div class="body">${esc(sec.body || '')}</div>
       <div class="actions">
         <button class="btn-delete-unresolved">削除</button>
