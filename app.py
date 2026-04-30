@@ -358,11 +358,11 @@ def tree():
 
 
 TEXT_EXTS = {
-    '.py', '.js', '.ts', '.jsx', '.tsx', '.sh', '.bash', '.json', '.yml', '.yaml',
-    '.xml', '.html', '.css', '.toml', '.md', '.txt', '.cfg', '.ini', '.conf',
-    '.env', '.service', '.timer', '.csv', '.sql', '.rb', '.go', '.rs', '.java',
-    '.c', '.h', '.cpp', '.hpp', '.vue', '.svelte', '.gitignore', '.dockerignore',
-    '.dockerfile', '.makefile', '.srt', '',
+    '.py', '.js', '.ts', '.jsx', '.tsx', '.sh', '.bash', '.ps1', '.psm1', '.psd1',
+    '.json', '.yml', '.yaml', '.xml', '.html', '.css', '.toml', '.md', '.txt',
+    '.cfg', '.ini', '.conf', '.env', '.service', '.timer', '.csv', '.sql',
+    '.rb', '.go', '.rs', '.java', '.c', '.h', '.cpp', '.hpp', '.vue', '.svelte',
+    '.gitignore', '.dockerignore', '.dockerfile', '.makefile', '.srt', '',
 }
 IMAGE_EXTS = {'.jpg', '.jpeg', '.png', '.gif', '.svg', '.webp', '.ico'}
 PDF_EXTS = {'.pdf'}

@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.1/marked.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/powershell.min.js"></script>
 </head>
 <body>
 
@@ -465,9 +466,9 @@ const IMAGE_EXTS = ['jpg','jpeg','png','gif','svg','webp','ico'];
 const PDF_EXTS = ['pdf'];
 const AUDIO_EXTS = ['mp3','wav','ogg','m4a','flac','aac','opus','webm'];
 const TEXT_EXTS = [
-  'py','js','ts','jsx','tsx','sh','bash','json','yml','yaml','xml','html','css',
-  'toml','md','txt','cfg','ini','conf','env','service','timer','csv','sql',
-  'rb','go','rs','java','c','h','cpp','hpp','vue','svelte','gitignore',
+  'py','js','ts','jsx','tsx','sh','bash','ps1','psm1','psd1','json','yml','yaml',
+  'xml','html','css','toml','md','txt','cfg','ini','conf','env','service','timer',
+  'csv','sql','rb','go','rs','java','c','h','cpp','hpp','vue','svelte','gitignore',
   'dockerignore','makefile','lock','log','srt',
 ];
 const LANG_MAP = {
@@ -477,6 +478,7 @@ const LANG_MAP = {
   '.toml':'toml', '.rb':'ruby', '.go':'go', '.rs':'rust', '.java':'java',
   '.c':'c', '.h':'c', '.cpp':'cpp', '.hpp':'cpp', '.sql':'sql',
   '.vue':'html', '.svelte':'html',
+  '.ps1':'powershell', '.psm1':'powershell', '.psd1':'powershell',
 };
 
 function parseSrt(text) {
