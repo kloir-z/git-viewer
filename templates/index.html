@@ -604,6 +604,7 @@ async function setupSrtEmbed(audioPath) {
 
 function setupSrtSync(audio, container, cues) {
   const cueEls = container.querySelectorAll('.srt-cue');
+  const isVideo = audio.tagName === 'VIDEO';
   let currentIdx = -1;
   let followEnabled = true;
   let programmaticScrollUntil = 0;
@@ -645,7 +646,7 @@ function setupSrtSync(audio, container, cues) {
     const el = cueEls[idx];
     if (!el) return;
     el.classList.add('current');
-    if (followEnabled) {
+    if (followEnabled && !isVideo) {
       // Suppress scroll events fired by smooth scrollIntoView so the manual-
       // scroll handler does not misread them as user input and pause follow.
       programmaticScrollUntil = performance.now() + 800;
