@@ -169,7 +169,7 @@ def get_repo_info(repo_path: Path) -> dict:
 
 @app.route("/")
 def index():
-    return render_template("index.html")
+    return render_template("index.html", code_dir=str(CODE_DIR.resolve()))
 
 
 @app.route("/api/check")
