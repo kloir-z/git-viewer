@@ -4,3 +4,5 @@ bookmarks.json
 favorites.json
 service_stderr.log
 service_stdout.log
+__pycache__/
+logs/
