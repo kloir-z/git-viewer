@@ -1122,6 +1122,18 @@ function clearBlobUi() {
   clearNavDirToggle();
 }
 
+// Preload an image so the new <img> is decoded before we swap the DOM.
+// The browser caches the response, so the subsequent <img src=...> renders
+// instantly from cache — no flicker while the previous image is removed.
+function preloadImage(url) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = resolve;
+    img.onerror = resolve;
+    img.src = url;
+  });
+}
+
 async function showBlob(path) {
   const blobView = document.getElementById('blob-view');
   if (!blobView) return;
@@ -1168,8 +1180,12 @@ async function showBlob(path) {
     return;
   }
 
-  // Images
+  // Images: preload first so the prior image stays visible until the new one
+  // is decoded. Stale-guard: if user clicked past this one while preloading,
+  // skip the render.
   if (IMAGE_EXTS.includes(ext)) {
+    await preloadImage(blobUrl);
+    if (currentBlobPath !== path) return;
     blobView.innerHTML = `
       <div class="section-header" style="margin-top:8px;">${esc(path)}${copyPathBtn(path)}</div>
       <div class="blob-container" style="text-align:center;padding:8px;">
