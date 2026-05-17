@@ -14,8 +14,10 @@ $Python = 'C:\Python314\python.exe'
 & $Python -m pip install --ignore-installed --no-user -r 'C:\code\git-viewer\requirements.txt'
 
 # Verify the system-wide install by running python with user-site disabled.
+# pillow_heif is verified explicitly because a user-site copy will satisfy the
+# Python import seen here but be invisible to the LocalSystem service.
 $env:PYTHONNOUSERSITE = '1'
-& $Python -c "import flask, os; print('flask path:', os.path.dirname(flask.__file__))"
+& $Python -c "import flask, pillow_heif, os; pillow_heif.register_heif_opener(); print('flask:', os.path.dirname(flask.__file__)); print('pillow_heif:', os.path.dirname(pillow_heif.__file__))"
 Remove-Item Env:PYTHONNOUSERSITE
 
 Stop-Transcript | Out-Null
