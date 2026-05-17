@@ -539,23 +539,21 @@ button:hover { background: var(--border); }
   }
 }
 
-/* Toggle button to reverse left/right nav direction
-   (per repo+folder+ext, e.g. vertical-text books navigate "next" leftward) */
+/* Inline toggle button (in section-header) to reverse left/right nav direction
+   per repo+folder+ext, e.g. vertical-text books navigate "next" leftward. */
 .btn-nav-dir-toggle {
-  position: fixed;
-  bottom: 16px;
-  left: 16px;
-  padding: 4px 10px;
-  background: var(--surface);
-  color: var(--text-muted);
+  margin-left: 8px;
+  padding: 1px 6px;
+  background: var(--bg-tertiary);
+  color: var(--text);
   border: 1px solid var(--border);
   border-radius: 4px;
   cursor: pointer;
   font-size: 11px;
-  opacity: 0.55;
-  z-index: 100;
+  line-height: 1.2;
+  vertical-align: middle;
 }
-.btn-nav-dir-toggle:hover { opacity: 1; color: var(--text); }
+.btn-nav-dir-toggle:hover { background: var(--accent); color: #fff; }
 
 /* Highlight currently previewed file in tree list */
 .list-row.active {

@@ -1097,20 +1097,20 @@ function renderBlobNavZones() {
 }
 
 function clearNavDirToggle() {
-  const old = document.getElementById('nav-dir-toggle');
-  if (old) old.remove();
+  const slot = document.getElementById('nav-dir-toggle-slot');
+  if (slot) slot.innerHTML = '';
 }
 function renderNavDirToggle() {
-  clearNavDirToggle();
-  if (currentBlobSiblings.length <= 1 || currentBlobIdx < 0) return;
-  const btn = document.createElement('button');
-  btn.id = 'nav-dir-toggle';
-  btn.className = 'btn-nav-dir-toggle';
+  const slot = document.getElementById('nav-dir-toggle-slot');
+  if (!slot) return;
+  if (currentBlobSiblings.length <= 1 || currentBlobIdx < 0) {
+    slot.innerHTML = '';
+    return;
+  }
   const reversed = isNavReversed(currentBlobPath);
-  btn.textContent = reversed ? '次 ←' : '→ 次';
-  btn.title = 'このフォルダ・拡張子のナビ方向を反転';
-  btn.onclick = toggleNavDirection;
-  document.body.appendChild(btn);
+  slot.innerHTML = `<button id="nav-dir-toggle" class="btn-nav-dir-toggle" title="このフォルダ・拡張子のナビ方向を反転">${reversed ? '次 ←' : '→ 次'}</button>`;
+  const btn = document.getElementById('nav-dir-toggle');
+  if (btn) btn.onclick = toggleNavDirection;
 }
 
 function clearBlobUi() {
@@ -1175,7 +1175,7 @@ async function showBlob(path) {
   // Binary files — show download link only
   if (!IMAGE_EXTS.includes(ext) && !PDF_EXTS.includes(ext) && !AUDIO_EXTS.includes(ext) && !VIDEO_EXTS.includes(ext) && !TEXT_EXTS.includes(ext) && ext !== '') {
     blobView.innerHTML = `
-      <div class="section-header" style="margin-top:8px;">${esc(path)}${copyPathBtn(path)}</div>
+      <div class="section-header" style="margin-top:8px;">${esc(path)}${copyPathBtn(path)}<span id="nav-dir-toggle-slot"></span></div>
       <div class="diff-empty">バイナリファイル — <a href="${blobUrl}" download style="color:var(--accent);">ダウンロード</a></div>`;
     return;
   }
@@ -1187,7 +1187,7 @@ async function showBlob(path) {
     await preloadImage(blobUrl);
     if (currentBlobPath !== path) return;
     blobView.innerHTML = `
-      <div class="section-header" style="margin-top:8px;">${esc(path)}${copyPathBtn(path)}</div>
+      <div class="section-header" style="margin-top:8px;">${esc(path)}${copyPathBtn(path)}<span id="nav-dir-toggle-slot"></span></div>
       <div class="blob-container" style="text-align:center;padding:8px;">
         <img src="${blobUrl}" alt="${esc(fileName)}" style="max-width:100%;height:auto;">
       </div>`;
@@ -1197,7 +1197,7 @@ async function showBlob(path) {
   // Video
   if (VIDEO_EXTS.includes(ext)) {
     blobView.innerHTML = `
-      <div class="section-header" style="margin-top:8px;">${esc(path)}${copyPathBtn(path)}${autoplayToggleHtml()}</div>
+      <div class="section-header" style="margin-top:8px;">${esc(path)}${copyPathBtn(path)}<span id="nav-dir-toggle-slot"></span>${autoplayToggleHtml()}</div>
       <div class="blob-container" style="padding:8px;">
         <video id="audio-player" controls preload="metadata" src="${blobUrl}"${autoplayMedia?' autoplay':''} style="width:100%; max-height:70vh; background:#000;"></video>
         <div id="playback-log-list" class="playback-log"></div>
@@ -1212,7 +1212,7 @@ async function showBlob(path) {
   // Audio
   if (AUDIO_EXTS.includes(ext)) {
     blobView.innerHTML = `
-      <div class="section-header" style="margin-top:8px;">${esc(path)}${copyPathBtn(path)}${autoplayToggleHtml()}</div>
+      <div class="section-header" style="margin-top:8px;">${esc(path)}${copyPathBtn(path)}<span id="nav-dir-toggle-slot"></span>${autoplayToggleHtml()}</div>
       <div class="blob-container" style="padding:8px;">
         <audio id="audio-player" controls preload="metadata" src="${blobUrl}"${autoplayMedia?' autoplay':''} style="width:100%;"></audio>
         <div id="playback-log-list" class="playback-log"></div>
@@ -1227,7 +1227,7 @@ async function showBlob(path) {
   // PDF
   if (PDF_EXTS.includes(ext)) {
     blobView.innerHTML = `
-      <div class="section-header" style="margin-top:8px;">${esc(path)}${copyPathBtn(path)}
+      <div class="section-header" style="margin-top:8px;">${esc(path)}${copyPathBtn(path)}<span id="nav-dir-toggle-slot"></span>
         <a href="${blobUrl}" target="_blank" rel="noopener" style="margin-left:8px;color:var(--accent);font-size:11px;">新しいタブで開く</a>
       </div>
       <iframe src="${blobUrl}" style="width:100%;height:70vh;border:1px solid #21262d;border-radius:4px;"></iframe>`;
@@ -1249,7 +1249,7 @@ async function showBlob(path) {
     const theme = mdPrefs.theme || 'dark';
     const themeClass = theme === 'dark' ? '' : ` md-theme-${theme}`;
     blobView.innerHTML = `
-      <div class="section-header" style="margin-top:8px;">${esc(path)}${copyPathBtn(path)}<span id="bm-jump-btn"></span></div>
+      <div class="section-header" style="margin-top:8px;">${esc(path)}${copyPathBtn(path)}<span id="nav-dir-toggle-slot"></span><span id="bm-jump-btn"></span></div>
       <div class="md-toolbar">
         <label>文字サイズ<select id="md-font-size" onchange="updateMdPref('fontSize',this.value)">
           <option value="11"${fontSize==='11'?' selected':''}>小</option>
@@ -1297,7 +1297,7 @@ async function showBlob(path) {
     const cues = parseSrt(data.content);
     if (cues.length === 0) {
       blobView.innerHTML = `
-        <div class="section-header" style="margin-top:8px;">${esc(path)}${copyPathBtn(path)}</div>
+        <div class="section-header" style="margin-top:8px;">${esc(path)}${copyPathBtn(path)}<span id="nav-dir-toggle-slot"></span></div>
         <div class="diff-empty">字幕を読み込めませんでした</div>
         <pre class="blob-container" style="padding:8px;white-space:pre-wrap;">${esc(data.content)}</pre>`;
       return;
@@ -1319,7 +1319,7 @@ async function showBlob(path) {
         </div>`;
     }).join('');
     blobView.innerHTML = `
-      <div class="section-header" style="margin-top:8px;">${esc(path)}${copyPathBtn(path)}<span id="bm-jump-btn"></span></div>
+      <div class="section-header" style="margin-top:8px;">${esc(path)}${copyPathBtn(path)}<span id="nav-dir-toggle-slot"></span><span id="bm-jump-btn"></span></div>
       <div class="blob-container srt-container">${cardsHtml}</div>`;
     blobView.querySelectorAll('.srt-cue').forEach((el, idx) => {
       el.addEventListener('dblclick', (e) => {
@@ -1346,7 +1346,7 @@ async function showBlob(path) {
       `<div class="code-line" data-bm-line="${i+1}">${line || ' '}</div>`
     ).join('');
     blobView.innerHTML = `
-      <div class="section-header" style="margin-top:8px;">${esc(path)}${copyPathBtn(path)}<span id="bm-jump-btn"></span></div>
+      <div class="section-header" style="margin-top:8px;">${esc(path)}${copyPathBtn(path)}<span id="nav-dir-toggle-slot"></span><span id="bm-jump-btn"></span></div>
       <div class="blob-container">
         <div class="code-wrapper hljs language-${lang}">${rowsHtml}</div>
       </div>`;
@@ -1419,7 +1419,7 @@ async function editBlob(path) {
   const escaped = data.content.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
   blobView.innerHTML = `
-    <div class="section-header" style="margin-top:8px;">${esc(path)}${copyPathBtn(path)}
+    <div class="section-header" style="margin-top:8px;">${esc(path)}${copyPathBtn(path)}<span id="nav-dir-toggle-slot"></span>
       <span style="margin-left:8px;color:var(--text-muted);font-size:11px;">編集中</span>
     </div>
     <div class="blob-container">
