@@ -250,6 +250,7 @@ function switchTab(tab) {
 
 async function renderTab() {
   if (!currentRepo) { content.innerHTML = '<div class="diff-empty">リポジトリがありません</div>'; return; }
+  clearBlobUi();
   if (currentTab === 'overview') await renderOverview();
   else if (currentTab === 'log') await renderLog();
   else if (currentTab === 'diff') await renderDiff();
@@ -394,9 +395,11 @@ async function toggleFileDiff(row, filePath, elId) {
 let currentPath = '';
 
 async function renderFiles(path) {
+  clearBlobUi();
   if (path !== undefined) currentPath = path;
   saveState();
   const entries = await fetchJson(`/api/tree?repo=${currentRepo}&path=${encodeURIComponent(currentPath)}`);
+  if (Array.isArray(entries)) lastDirFetch = { key: `${currentRepo}|${currentPath}`, entries };
 
   const breadcrumb = buildBreadcrumb(currentPath);
 
@@ -408,7 +411,7 @@ async function renderFiles(path) {
       ${currentPath ? `<div class="list-row clickable" onclick="renderFiles('${parentPath(currentPath)}')"><span class="tree-icon">${ICON_FOLDER_OPEN}</span><span>..</span></div>` : ''}
       ${(entries || []).map(e => e.type === 'tree'
         ? `<div class="list-row clickable" onclick="renderFiles('${esc(e.path)}')"><span class="tree-icon">${ICON_FOLDER}</span><span>${esc(e.name)}</span><span class="fav-star ${favorites.includes(currentRepo + '/' + e.path) ? 'active' : ''}" onclick="toggleFavorite(event, currentRepo, '${esc(e.path)}')">${favorites.includes(currentRepo + '/' + e.path) ? '★' : '☆'}</span></div>`
-        : `<div class="list-row clickable" onclick="showBlob('${esc(e.path)}')"><span class="tree-icon">${ICON_FILE}</span><span>${esc(e.name)}</span></div>`
+        : `<div class="list-row clickable" data-blob-path="${esc(e.path)}" onclick="showBlob('${esc(e.path)}')"><span class="tree-icon">${ICON_FILE}</span><span>${esc(e.name)}</span></div>`
       ).join('')}
     </div>
     <div id="blob-view"></div>
@@ -976,14 +979,133 @@ function jumpToBookmark() {
   if (target) target.scrollIntoView({block: 'center'});
 }
 
+// --- Blob preview state (FAB / nav zones / sibling tracking) ---
+let currentBlobPath = '';
+let currentBlobSiblings = [];
+let currentBlobIdx = -1;
+let lastDirFetch = { key: '', entries: null };
+
+function getBlobDir(p) {
+  const i = p.lastIndexOf('/');
+  return i >= 0 ? p.substring(0, i) : '';
+}
+function getExt(p) {
+  const slash = p.lastIndexOf('/');
+  const dot = p.lastIndexOf('.');
+  return dot > slash ? p.substring(dot + 1).toLowerCase() : '';
+}
+function isEditableExt(ext) {
+  return TEXT_EXTS.includes(ext);
+}
+
+async function loadSiblings(path) {
+  const dir = getBlobDir(path);
+  const ext = getExt(path);
+  const key = `${currentRepo}|${dir}`;
+  let entries = (lastDirFetch.key === key) ? lastDirFetch.entries : null;
+  if (!entries) {
+    entries = await fetchJson(`/api/tree?repo=${currentRepo}&path=${encodeURIComponent(dir)}`);
+    if (Array.isArray(entries)) lastDirFetch = { key, entries };
+  }
+  if (!Array.isArray(entries)) return { siblings: [], idx: -1 };
+  const siblings = entries
+    .filter(e => e.type === 'blob' && getExt(e.path) === ext)
+    .map(e => e.path);
+  return { siblings, idx: siblings.indexOf(path) };
+}
+
+function highlightCurrentInList() {
+  document.querySelectorAll('.list-row.active').forEach(el => el.classList.remove('active'));
+  if (!currentBlobPath) return;
+  const sel = (window.CSS && CSS.escape) ? CSS.escape(currentBlobPath) : currentBlobPath.replace(/"/g, '\\"');
+  const row = document.querySelector(`.list-row[data-blob-path="${sel}"]`);
+  if (row) row.classList.add('active');
+}
+
+function renderEditFab(path) {
+  const old = document.getElementById('edit-fab');
+  if (old) old.remove();
+  const btn = document.createElement('button');
+  btn.id = 'edit-fab';
+  btn.className = 'btn-edit-fab';
+  btn.textContent = '編集';
+  btn.onclick = () => editBlob(path);
+  document.body.appendChild(btn);
+}
+function clearEditFab() {
+  const old = document.getElementById('edit-fab');
+  if (old) old.remove();
+}
+
+function clearBlobNavZones() {
+  document.querySelectorAll('.blob-nav-zone').forEach(el => el.remove());
+}
+function renderBlobNavZones() {
+  clearBlobNavZones();
+  if (currentBlobSiblings.length <= 1 || currentBlobIdx < 0) return;
+  const prev = currentBlobIdx > 0 ? currentBlobSiblings[currentBlobIdx - 1] : null;
+  const next = currentBlobIdx < currentBlobSiblings.length - 1 ? currentBlobSiblings[currentBlobIdx + 1] : null;
+  if (prev) {
+    const el = document.createElement('div');
+    el.className = 'blob-nav-zone left';
+    el.innerHTML = '<span>‹</span>';
+    el.title = '← ' + prev.split('/').pop();
+    el.onclick = () => showBlob(prev);
+    document.body.appendChild(el);
+  }
+  if (next) {
+    const el = document.createElement('div');
+    el.className = 'blob-nav-zone right';
+    el.innerHTML = '<span>›</span>';
+    el.title = next.split('/').pop() + ' →';
+    el.onclick = () => showBlob(next);
+    document.body.appendChild(el);
+  }
+}
+
+function clearBlobUi() {
+  currentBlobPath = '';
+  currentBlobSiblings = [];
+  currentBlobIdx = -1;
+  clearEditFab();
+  clearBlobNavZones();
+}
+
 async function showBlob(path) {
   const blobView = document.getElementById('blob-view');
   if (!blobView) return;
-  blobView.innerHTML = '<div style="padding:4px 8px;color:var(--text-muted);">Loading...</div>';
+
+  // Preserve current blob-view height during the swap so the document does not
+  // shrink and yank the scroll position to the top. Old content stays visible
+  // until the new render replaces it (no jarring "Loading..." flash mid-swap).
+  const prevHeight = blobView.offsetHeight;
+  if (prevHeight > 0) {
+    blobView.style.minHeight = prevHeight + 'px';
+  } else {
+    blobView.innerHTML = '<div style="padding:4px 8px;color:var(--text-muted);">Loading...</div>';
+  }
+  // Release the placeholder height once the new content has had time to settle
+  // (incl. <img> decode). Stale-guard so a rapid switch keeps the new height.
+  setTimeout(() => {
+    if (currentBlobPath === path) blobView.style.minHeight = '';
+  }, 1500);
 
   const ext = path.includes('.') ? path.split('.').pop().toLowerCase() : '';
   const blobUrl = `/api/blob?repo=${currentRepo}&path=${encodeURIComponent(path)}`;
   const fileName = path.split('/').pop();
+
+  // Common preview UI: edit FAB, list highlight, sibling navigation zones
+  currentBlobPath = path;
+  if (isEditableExt(ext)) renderEditFab(path);
+  else clearEditFab();
+  highlightCurrentInList();
+  clearBlobNavZones();
+  loadSiblings(path).then(({ siblings, idx }) => {
+    if (currentBlobPath !== path) return; // stale
+    currentBlobSiblings = siblings;
+    currentBlobIdx = idx;
+    renderBlobNavZones();
+  });
 
   // Binary files — show download link only
   if (!IMAGE_EXTS.includes(ext) && !PDF_EXTS.includes(ext) && !AUDIO_EXTS.includes(ext) && !VIDEO_EXTS.includes(ext) && !TEXT_EXTS.includes(ext) && ext !== '') {
@@ -1056,7 +1178,7 @@ async function showBlob(path) {
     const theme = mdPrefs.theme || 'dark';
     const themeClass = theme === 'dark' ? '' : ` md-theme-${theme}`;
     blobView.innerHTML = `
-      <div class="section-header" style="margin-top:8px;">${esc(path)}${copyPathBtn(path)}<span id="bm-jump-btn"></span><button class="btn-edit" onclick="editBlob('${esc(path)}')">編集</button></div>
+      <div class="section-header" style="margin-top:8px;">${esc(path)}${copyPathBtn(path)}<span id="bm-jump-btn"></span></div>
       <div class="md-toolbar">
         <label>文字サイズ<select id="md-font-size" onchange="updateMdPref('fontSize',this.value)">
           <option value="11"${fontSize==='11'?' selected':''}>小</option>
@@ -1104,7 +1226,7 @@ async function showBlob(path) {
     const cues = parseSrt(data.content);
     if (cues.length === 0) {
       blobView.innerHTML = `
-        <div class="section-header" style="margin-top:8px;">${esc(path)}${copyPathBtn(path)}<button class="btn-edit" onclick="editBlob('${esc(path)}')">編集</button></div>
+        <div class="section-header" style="margin-top:8px;">${esc(path)}${copyPathBtn(path)}</div>
         <div class="diff-empty">字幕を読み込めませんでした</div>
         <pre class="blob-container" style="padding:8px;white-space:pre-wrap;">${esc(data.content)}</pre>`;
       return;
@@ -1126,7 +1248,7 @@ async function showBlob(path) {
         </div>`;
     }).join('');
     blobView.innerHTML = `
-      <div class="section-header" style="margin-top:8px;">${esc(path)}${copyPathBtn(path)}<span id="bm-jump-btn"></span><button class="btn-edit" onclick="editBlob('${esc(path)}')">編集</button></div>
+      <div class="section-header" style="margin-top:8px;">${esc(path)}${copyPathBtn(path)}<span id="bm-jump-btn"></span></div>
       <div class="blob-container srt-container">${cardsHtml}</div>`;
     blobView.querySelectorAll('.srt-cue').forEach((el, idx) => {
       el.addEventListener('dblclick', (e) => {
@@ -1153,7 +1275,7 @@ async function showBlob(path) {
       `<div class="code-line" data-bm-line="${i+1}">${line || ' '}</div>`
     ).join('');
     blobView.innerHTML = `
-      <div class="section-header" style="margin-top:8px;">${esc(path)}${copyPathBtn(path)}<span id="bm-jump-btn"></span><button class="btn-edit" onclick="editBlob('${esc(path)}')">編集</button></div>
+      <div class="section-header" style="margin-top:8px;">${esc(path)}${copyPathBtn(path)}<span id="bm-jump-btn"></span></div>
       <div class="blob-container">
         <div class="code-wrapper hljs language-${lang}">${rowsHtml}</div>
       </div>`;
@@ -1193,6 +1315,8 @@ async function editBlob(path) {
   const blobView = document.getElementById('blob-view');
   if (!blobView) return;
 
+  clearEditFab();
+  clearBlobNavZones();
   editingPath = path;
   const blobUrl = `/api/blob?repo=${currentRepo}&path=${encodeURIComponent(path)}`;
   const data = await fetchJson(blobUrl);
