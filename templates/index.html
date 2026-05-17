@@ -1203,7 +1203,7 @@ async function showBlob(path) {
       </div>
       <div class="blob-container markdown-body${themeClass}" id="md-body" style="padding:12px;--md-font-size:${fontSize}px;--md-spacing:${spacing}px;"></div>`;
     const mdBody = blobView.querySelector('#md-body');
-    mdBody.innerHTML = marked.parse(data.content);
+    mdBody.innerHTML = marked.parse(data.content, { breaks: true });
     rewriteMdAssets(mdBody, parentPath(path));
     // Mermaid: <pre><code class="language-mermaid"> を <div class="mermaid"> に変換 (sync)
     // hljs / splitMdIntoSentences が触る前にやる
