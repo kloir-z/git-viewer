@@ -501,11 +501,14 @@ button:hover { background: var(--border); }
 }
 .btn-edit-fab:hover { opacity: 1; }
 
-/* Blob navigation tap zones (left/right edges) */
+/* Blob navigation tap zones (left/right edges).
+   PC: smaller, vertically centered so it doesn't overlap with body text/links.
+   Mobile: bigger thumb-reach area (overridden below in @media). */
 .blob-nav-zone {
   position: fixed;
-  top: 0;
-  bottom: 80px;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 220px;
   width: 10vw;
   max-width: 96px;
   min-width: 36px;
@@ -528,6 +531,13 @@ button:hover { background: var(--border); }
 }
 .blob-nav-zone.left { left: 0; }
 .blob-nav-zone.right { right: 0; }
+
+@media (max-width: 768px) {
+  .blob-nav-zone {
+    height: 55vh;
+    max-width: 72px;
+  }
+}
 
 /* Highlight currently previewed file in tree list */
 .list-row.active {
