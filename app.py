@@ -1,3 +1,4 @@
+import io
 import json
 import mimetypes
 import os
@@ -11,6 +12,14 @@ from pathlib import Path
 import notes as notes_mod
 
 from flask import Flask, Response, abort, jsonify, render_template, request, send_file
+
+try:
+    import pillow_heif
+    from PIL import Image
+    pillow_heif.register_heif_opener()
+    HEIF_SUPPORT = True
+except ImportError:
+    HEIF_SUPPORT = False
 
 app = Flask(__name__)
 
@@ -365,7 +374,8 @@ TEXT_EXTS = {
     '.rb', '.go', '.rs', '.java', '.c', '.h', '.cpp', '.hpp', '.vue', '.svelte',
     '.gitignore', '.dockerignore', '.dockerfile', '.makefile', '.srt', '',
 }
-IMAGE_EXTS = {'.jpg', '.jpeg', '.png', '.gif', '.svg', '.webp', '.ico'}
+IMAGE_EXTS = {'.jpg', '.jpeg', '.png', '.gif', '.svg', '.webp', '.ico', '.bmp', '.avif', '.heic', '.heif'}
+HEIF_EXTS = {'.heic', '.heif'}
 PDF_EXTS = {'.pdf'}
 
 
@@ -394,6 +404,21 @@ def blob():
         except Exception:
             abort(500)
         return jsonify({"content": content, "path": path, "ext": ext})
+
+    # HEIC/HEIF: convert to JPEG since most browsers can't render natively
+    if ext in HEIF_EXTS:
+        if not HEIF_SUPPORT:
+            abort(500, description="HEIC support not installed (pip install pillow-heif)")
+        try:
+            img = Image.open(file_full)
+            if img.mode not in ('RGB', 'L'):
+                img = img.convert('RGB')
+            buf = io.BytesIO()
+            img.save(buf, format='JPEG', quality=85)
+            buf.seek(0)
+            return send_file(buf, mimetype='image/jpeg')
+        except Exception:
+            abort(500)
 
     # Binary files (images, PDFs, audio, office docs, archives, etc.): return raw bytes
     mime = mimetypes.guess_type(path)[0] or 'application/octet-stream'
