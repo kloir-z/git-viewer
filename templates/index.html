@@ -1212,14 +1212,17 @@ async function showBlob(path) {
 
   // Audio
   if (AUDIO_EXTS.includes(ext)) {
+    const audioAutoplay = autoplayMedia || audioContinuous;
     blobView.innerHTML = `
-      <div class="section-header" style="margin-top:8px;">${esc(path)}${copyPathBtn(path)}<span id="nav-dir-toggle-slot"></span>${autoplayToggleHtml()}</div>
+      <div class="section-header" style="margin-top:8px;">${esc(path)}${copyPathBtn(path)}<span id="nav-dir-toggle-slot"></span>${autoplayToggleHtml()}${continuousToggleHtml()}</div>
       <div class="blob-container" style="padding:8px;">
-        <audio id="audio-player" controls preload="metadata" src="${blobUrl}"${autoplayMedia?' autoplay':''} style="width:100%;"></audio>
+        <audio id="audio-player" controls preload="metadata" src="${blobUrl}"${audioAutoplay?' autoplay':''} style="width:100%;"></audio>
         <div id="playback-log-list" class="playback-log"></div>
         <div id="srt-embed" class="srt-embed-container"></div>
       </div>`;
     wireAutoplayToggle();
+    wireContinuousToggle();
+    setupAudioContinuous();
     setupPlaybackLog(path);
     setupSrtEmbed(path);
     return;
@@ -1390,9 +1393,18 @@ function updateMdPref(key, value) {
 // Applies on every new media load — the toggle change does NOT restart the
 // currently playing file.
 let autoplayMedia = localStorage.getItem('autoplayMedia') === 'true';
+// Audio-only "continuous" mode: when the current audio ends, navigate to the
+// next sibling. Implies autoplay (the next track must actually start).
+let audioContinuous = localStorage.getItem('audioContinuous') === 'true';
+
 function autoplayToggleHtml() {
   return `<label class="autoplay-toggle" title="次のファイルから自動再生" style="margin-left:8px;font-size:11px;cursor:pointer;color:var(--text-muted);user-select:none;">
     <input type="checkbox" id="autoplay-cb"${autoplayMedia?' checked':''} style="vertical-align:middle;margin:0 3px 0 0;"> 自動再生
+  </label>`;
+}
+function continuousToggleHtml() {
+  return `<label class="autoplay-toggle" title="再生終了で次のファイルへ自動移動（自動再生も有効化）" style="margin-left:8px;font-size:11px;cursor:pointer;color:var(--text-muted);user-select:none;">
+    <input type="checkbox" id="continuous-cb"${audioContinuous?' checked':''} style="vertical-align:middle;margin:0 3px 0 0;"> 連続再生
   </label>`;
 }
 function wireAutoplayToggle() {
@@ -1401,6 +1413,24 @@ function wireAutoplayToggle() {
   cb.addEventListener('change', () => {
     autoplayMedia = cb.checked;
     localStorage.setItem('autoplayMedia', String(autoplayMedia));
+  });
+}
+function wireContinuousToggle() {
+  const cb = document.getElementById('continuous-cb');
+  if (!cb) return;
+  cb.addEventListener('change', () => {
+    audioContinuous = cb.checked;
+    localStorage.setItem('audioContinuous', String(audioContinuous));
+  });
+}
+function setupAudioContinuous() {
+  const audio = document.getElementById('audio-player');
+  if (!audio) return;
+  audio.addEventListener('ended', () => {
+    if (!audioContinuous) return;
+    if (currentBlobIdx < 0 || currentBlobIdx >= currentBlobSiblings.length - 1) return;
+    const next = currentBlobSiblings[currentBlobIdx + 1];
+    showBlob(next);
   });
 }
 
