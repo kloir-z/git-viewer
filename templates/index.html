@@ -1562,6 +1562,16 @@ function setupPlaybackLog(audioPath) {
       target.dataset.lastTap = String(now);
     }
   }, {passive: false});
+
+  // PC: ブックマーク対象要素上でのダブルクリック時の単語選択を抑止する。
+  // mousedown の detail >= 2 (2 連打目以降) を preventDefault すれば、
+  // 単発クリック→ドラッグでの範囲選択や長押しは従来通り動く。
+  document.addEventListener('mousedown', (e) => {
+    if (e.detail < 2) return;
+    if (e.target.closest(IGNORE)) return;
+    if (!e.target.closest(SELECTOR)) return;
+    e.preventDefault();
+  });
 })();
 
 init();
