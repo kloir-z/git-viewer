@@ -1625,6 +1625,30 @@ function setupPlaybackLog(audioPath) {
   });
 })();
 
+// 左右キーで前後 sibling に移動 (ナビゾーンと同じ方向、反転設定も反映)
+(function setupBlobKeyboardNav() {
+  const SKIP_TAGS = new Set(['INPUT', 'TEXTAREA', 'SELECT', 'AUDIO', 'VIDEO']);
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+    if (!currentBlobPath || currentBlobSiblings.length <= 1 || currentBlobIdx < 0) return;
+    const ae = document.activeElement;
+    if (ae) {
+      if (SKIP_TAGS.has(ae.tagName)) return;
+      if (ae.isContentEditable) return;
+    }
+    const prev = currentBlobIdx > 0 ? currentBlobSiblings[currentBlobIdx - 1] : null;
+    const next = currentBlobIdx < currentBlobSiblings.length - 1 ? currentBlobSiblings[currentBlobIdx + 1] : null;
+    const reversed = isNavReversed(currentBlobPath);
+    const leftPath = reversed ? next : prev;
+    const rightPath = reversed ? prev : next;
+    const target = e.key === 'ArrowLeft' ? leftPath : rightPath;
+    if (!target) return;
+    e.preventDefault();
+    showBlob(target);
+  });
+})();
+
 init();
 
 // === File notes feature ===
