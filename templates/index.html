@@ -1197,12 +1197,13 @@ async function showBlob(path) {
   // Video
   if (VIDEO_EXTS.includes(ext)) {
     blobView.innerHTML = `
-      <div class="section-header" style="margin-top:8px;">${esc(path)}${copyPathBtn(path)}</div>
+      <div class="section-header" style="margin-top:8px;">${esc(path)}${copyPathBtn(path)}${autoplayToggleHtml()}</div>
       <div class="blob-container" style="padding:8px;">
-        <video id="audio-player" controls preload="metadata" src="${blobUrl}" style="width:100%; max-height:70vh; background:#000;"></video>
+        <video id="audio-player" controls preload="metadata" src="${blobUrl}"${autoplayMedia?' autoplay':''} style="width:100%; max-height:70vh; background:#000;"></video>
         <div id="playback-log-list" class="playback-log"></div>
         <div id="srt-embed" class="srt-embed-container"></div>
       </div>`;
+    wireAutoplayToggle();
     setupPlaybackLog(path);
     setupSrtEmbed(path);
     return;
@@ -1211,12 +1212,13 @@ async function showBlob(path) {
   // Audio
   if (AUDIO_EXTS.includes(ext)) {
     blobView.innerHTML = `
-      <div class="section-header" style="margin-top:8px;">${esc(path)}${copyPathBtn(path)}</div>
+      <div class="section-header" style="margin-top:8px;">${esc(path)}${copyPathBtn(path)}${autoplayToggleHtml()}</div>
       <div class="blob-container" style="padding:8px;">
-        <audio id="audio-player" controls preload="metadata" src="${blobUrl}" style="width:100%;"></audio>
+        <audio id="audio-player" controls preload="metadata" src="${blobUrl}"${autoplayMedia?' autoplay':''} style="width:100%;"></audio>
         <div id="playback-log-list" class="playback-log"></div>
         <div id="srt-embed" class="srt-embed-container"></div>
       </div>`;
+    wireAutoplayToggle();
     setupPlaybackLog(path);
     setupSrtEmbed(path);
     return;
@@ -1375,6 +1377,24 @@ function updateMdPref(key, value) {
     if (value !== 'dark') body.classList.add('md-theme-' + value);
     rerenderMermaidWithTheme(value);
   }
+}
+
+// Media autoplay (audio/video). User-toggleable; persisted in localStorage.
+// Applies on every new media load — the toggle change does NOT restart the
+// currently playing file.
+let autoplayMedia = localStorage.getItem('autoplayMedia') === 'true';
+function autoplayToggleHtml() {
+  return `<label class="autoplay-toggle" title="次のファイルから自動再生" style="margin-left:8px;font-size:11px;cursor:pointer;color:var(--text-muted);user-select:none;">
+    <input type="checkbox" id="autoplay-cb"${autoplayMedia?' checked':''} style="vertical-align:middle;margin:0 3px 0 0;"> 自動再生
+  </label>`;
+}
+function wireAutoplayToggle() {
+  const cb = document.getElementById('autoplay-cb');
+  if (!cb) return;
+  cb.addEventListener('change', () => {
+    autoplayMedia = cb.checked;
+    localStorage.setItem('autoplayMedia', String(autoplayMedia));
+  });
 }
 
 let editingPath = '';
