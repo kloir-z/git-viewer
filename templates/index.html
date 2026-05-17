@@ -196,6 +196,7 @@ async function init() {
   // Kick off /api/repos in background (slow on Windows), render saved repo immediately.
   const reposPromise = fetchJson('/api/repos');
   const favsPromise = fetchJson('/api/favorites');
+  const navDirsPromise = fetchJson('/api/nav_direction').catch(() => ({}));
 
   if (saved.repo) {
     currentRepo = saved.repo;
@@ -205,6 +206,7 @@ async function init() {
 
   repos = await reposPromise;
   favorites = await favsPromise;
+  navDirections = await navDirsPromise || {};
   repoSelect.innerHTML = buildRepoOptions(repos);
   buildFavOptions();
 
@@ -987,6 +989,30 @@ let currentBlobPath = '';
 let currentBlobSiblings = [];
 let currentBlobIdx = -1;
 let lastDirFetch = { key: '', entries: null };
+let navDirections = {}; // { "repo|dir|ext": "reversed" } — absent = normal
+
+function navDirKey(path) {
+  return `${currentRepo}|${getBlobDir(path)}|${getExt(path)}`;
+}
+function isNavReversed(path) {
+  return navDirections[navDirKey(path)] === 'reversed';
+}
+async function toggleNavDirection() {
+  if (!currentBlobPath) return;
+  const key = navDirKey(currentBlobPath);
+  const next = navDirections[key] === 'reversed' ? 'normal' : 'reversed';
+  if (next === 'normal') delete navDirections[key];
+  else navDirections[key] = next;
+  renderBlobNavZones();
+  renderNavDirToggle();
+  try {
+    await fetch('/api/nav_direction', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({key, direction: next}),
+    });
+  } catch (e) { console.error('nav_direction save failed', e); }
+}
 
 function getBlobDir(p) {
   const i = p.lastIndexOf('/');
@@ -1048,22 +1074,43 @@ function renderBlobNavZones() {
   if (currentBlobSiblings.length <= 1 || currentBlobIdx < 0) return;
   const prev = currentBlobIdx > 0 ? currentBlobSiblings[currentBlobIdx - 1] : null;
   const next = currentBlobIdx < currentBlobSiblings.length - 1 ? currentBlobSiblings[currentBlobIdx + 1] : null;
-  if (prev) {
+  // reversed: swap which side is prev vs next (e.g. vertical-text book = next on left)
+  const reversed = isNavReversed(currentBlobPath);
+  const leftPath = reversed ? next : prev;
+  const rightPath = reversed ? prev : next;
+  if (leftPath) {
     const el = document.createElement('div');
     el.className = 'blob-nav-zone left';
     el.innerHTML = '<span>‹</span>';
-    el.title = '← ' + prev.split('/').pop();
-    el.onclick = () => showBlob(prev);
+    el.title = leftPath.split('/').pop();
+    el.onclick = () => showBlob(leftPath);
     document.body.appendChild(el);
   }
-  if (next) {
+  if (rightPath) {
     const el = document.createElement('div');
     el.className = 'blob-nav-zone right';
     el.innerHTML = '<span>›</span>';
-    el.title = next.split('/').pop() + ' →';
-    el.onclick = () => showBlob(next);
+    el.title = rightPath.split('/').pop();
+    el.onclick = () => showBlob(rightPath);
     document.body.appendChild(el);
   }
+}
+
+function clearNavDirToggle() {
+  const old = document.getElementById('nav-dir-toggle');
+  if (old) old.remove();
+}
+function renderNavDirToggle() {
+  clearNavDirToggle();
+  if (currentBlobSiblings.length <= 1 || currentBlobIdx < 0) return;
+  const btn = document.createElement('button');
+  btn.id = 'nav-dir-toggle';
+  btn.className = 'btn-nav-dir-toggle';
+  const reversed = isNavReversed(currentBlobPath);
+  btn.textContent = reversed ? '次 ←' : '→ 次';
+  btn.title = 'このフォルダ・拡張子のナビ方向を反転';
+  btn.onclick = toggleNavDirection;
+  document.body.appendChild(btn);
 }
 
 function clearBlobUi() {
@@ -1072,6 +1119,7 @@ function clearBlobUi() {
   currentBlobIdx = -1;
   clearEditFab();
   clearBlobNavZones();
+  clearNavDirToggle();
 }
 
 async function showBlob(path) {
@@ -1103,11 +1151,13 @@ async function showBlob(path) {
   else clearEditFab();
   highlightCurrentInList();
   clearBlobNavZones();
+  clearNavDirToggle();
   loadSiblings(path).then(({ siblings, idx }) => {
     if (currentBlobPath !== path) return; // stale
     currentBlobSiblings = siblings;
     currentBlobIdx = idx;
     renderBlobNavZones();
+    renderNavDirToggle();
   });
 
   // Binary files — show download link only
@@ -1320,6 +1370,7 @@ async function editBlob(path) {
 
   clearEditFab();
   clearBlobNavZones();
+  clearNavDirToggle();
   editingPath = path;
   const blobUrl = `/api/blob?repo=${currentRepo}&path=${encodeURIComponent(path)}`;
   const data = await fetchJson(blobUrl);

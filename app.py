@@ -88,6 +88,22 @@ def write_bookmarks(bms: dict):
     BOOKMARKS_FILE.write_text(json.dumps(bms, ensure_ascii=False), encoding="utf-8")
 
 
+NAV_DIRECTIONS_FILE = Path(__file__).parent / "nav_directions.json"
+
+
+def read_nav_directions() -> dict:
+    if NAV_DIRECTIONS_FILE.is_file():
+        try:
+            return json.loads(NAV_DIRECTIONS_FILE.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return {}
+    return {}
+
+
+def write_nav_directions(d: dict):
+    NAV_DIRECTIONS_FILE.write_text(json.dumps(d, ensure_ascii=False), encoding="utf-8")
+
+
 def valid_repo(name: str) -> Path:
     """Validate repo name and return path. Abort 404 if not a git repo.
 
@@ -535,6 +551,27 @@ def bookmark_remove():
         if not bms[name]:
             del bms[name]
         write_bookmarks(bms)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/nav_direction")
+def nav_direction_get():
+    return jsonify(read_nav_directions())
+
+
+@app.route("/api/nav_direction", methods=["POST"])
+def nav_direction_set():
+    data = request.get_json()
+    if not data or "key" not in data:
+        abort(400)
+    key = data["key"]
+    direction = data.get("direction", "normal")
+    dirs = read_nav_directions()
+    if direction == "normal":
+        dirs.pop(key, None)
+    else:
+        dirs[key] = direction
+    write_nav_directions(dirs)
     return jsonify({"ok": True})
 
 

@@ -2,6 +2,7 @@
 config.local.json
 bookmarks.json
 favorites.json
+nav_directions.json
 service_stderr.log
 service_stdout.log
 __pycache__/
