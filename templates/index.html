@@ -10,6 +10,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.1/marked.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/powershell.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.min.js"></script>
 </head>
 <body>
 
@@ -858,6 +859,66 @@ function splitMdIntoSentences(root) {
   return ctx.counter;
 }
 
+// ----- Mermaid diagram support -----
+
+const MERMAID_THEME_MAP = { dark: 'dark', light: 'default', sepia: 'neutral' };
+
+function mermaidThemeForUi(uiTheme) {
+  return MERMAID_THEME_MAP[uiTheme] || 'default';
+}
+
+// `marked.parse` が `<pre><code class="language-mermaid">` を生成するので、
+// それを `<div class="mermaid">` に置換する (sync)。元ソースは data 属性に保持して
+// テーマ切替時に再描画できるようにする。
+function prepareMermaidBlocks(container) {
+  const codeBlocks = container.querySelectorAll('pre code.language-mermaid');
+  const divs = [];
+  codeBlocks.forEach(codeEl => {
+    const pre = codeEl.closest('pre');
+    if (!pre) return;
+    const source = codeEl.textContent;
+    const div = document.createElement('div');
+    div.className = 'mermaid';
+    div.dataset.mermaidSource = source;
+    div.textContent = source;
+    pre.replaceWith(div);
+    divs.push(div);
+  });
+  return divs;
+}
+
+async function renderMermaidBlocks(divs, uiTheme) {
+  if (typeof mermaid === 'undefined') return;
+  if (!divs || divs.length === 0) return;
+  try {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: mermaidThemeForUi(uiTheme),
+      securityLevel: 'loose',
+      fontFamily: 'Yu Gothic UI, "Segoe UI", "Hiragino Sans", sans-serif',
+      flowchart: { padding: 14, nodeSpacing: 35, rankSpacing: 50, htmlLabels: true, useMaxWidth: true },
+      sequence: { actorMargin: 60, boxMargin: 10, noteMargin: 10, messageMargin: 35, wrap: true, noteAlign: 'left', useMaxWidth: true },
+    });
+    await mermaid.run({ nodes: divs });
+  } catch (e) {
+    console.error('Mermaid render error:', e);
+  }
+}
+
+async function rerenderMermaidWithTheme(uiTheme) {
+  if (typeof mermaid === 'undefined') return;
+  const divs = document.querySelectorAll('.mermaid');
+  if (divs.length === 0) return;
+  divs.forEach(div => {
+    const src = div.dataset.mermaidSource;
+    if (!src) return;
+    div.removeAttribute('data-processed');
+    div.innerHTML = '';
+    div.textContent = src;
+  });
+  await renderMermaidBlocks([...divs], uiTheme);
+}
+
 function bookmarkTarget(blobView, type, index) {
   if (type === 'md') {
     return blobView.querySelector(`[data-bm-idx="${index}"]`);
@@ -1019,9 +1080,14 @@ async function showBlob(path) {
     const mdBody = blobView.querySelector('#md-body');
     mdBody.innerHTML = marked.parse(data.content);
     rewriteMdAssets(mdBody, parentPath(path));
+    // Mermaid: <pre><code class="language-mermaid"> を <div class="mermaid"> に変換 (sync)
+    // hljs / splitMdIntoSentences が触る前にやる
+    const mermaidDivs = prepareMermaidBlocks(mdBody);
     blobView.querySelectorAll('pre code').forEach(block => hljs.highlightElement(block));
     // 文単位 / 見出し単位 / コードブロック単位で data-bm-idx を付与
     splitMdIntoSentences(mdBody);
+    // Mermaid を非同期描画 (fire-and-forget、ブックマーク等の処理を待たせない)
+    renderMermaidBlocks(mermaidDivs, theme);
     mdBody.querySelectorAll('[data-bm-idx]').forEach(el => {
       const idx = Number(el.getAttribute('data-bm-idx'));
       el.addEventListener('dblclick', (e) => {
@@ -1116,6 +1182,7 @@ function updateMdPref(key, value) {
   if (key === 'theme') {
     body.classList.remove('md-theme-light', 'md-theme-sepia');
     if (value !== 'dark') body.classList.add('md-theme-' + value);
+    rerenderMermaidWithTheme(value);
   }
 }
 

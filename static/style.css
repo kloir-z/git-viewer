@@ -300,6 +300,32 @@ button:hover { background: var(--border); }
 .markdown-body img { max-width: 100%; }
 .markdown-body li { margin: calc(var(--md-spacing) * 0.5) 0; }
 
+/* Mermaid diagram block. Mermaid 描画前は textContent (素のソース) が見えるので
+   describe-by-default の挙動になる。描画後は data-processed="true" が付く */
+.markdown-body .mermaid {
+  margin: calc(var(--md-spacing) * 1.5) 0;
+  padding: 8px;
+  text-align: center;
+  overflow-x: auto;
+}
+.markdown-body .mermaid:not([data-processed]) {
+  background: #161b22;
+  border: 1px dashed #30363d;
+  border-radius: 4px;
+  font-family: ui-monospace, SFMono-Regular, "Cascadia Code", monospace;
+  font-size: calc(var(--md-font-size) * 0.85);
+  text-align: left;
+  white-space: pre-wrap;
+  color: #8b949e;
+}
+.markdown-body .mermaid svg { max-width: 100%; height: auto; }
+.markdown-body.md-theme-light .mermaid:not([data-processed]) {
+  background: #f0f2f5; border-color: #d1d9e0; color: #59636e;
+}
+.markdown-body.md-theme-sepia .mermaid:not([data-processed]) {
+  background: #ede6d8; border-color: #d4c9b8; color: #6b5d4a;
+}
+
 /* Markdown light theme */
 .markdown-body.md-theme-light {
   color: #1f2328; background: #f6f8fa;
