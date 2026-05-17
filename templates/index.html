@@ -1191,6 +1191,7 @@ async function showBlob(path) {
       <div class="blob-container" style="text-align:center;padding:8px;">
         <img src="${blobUrl}" alt="${esc(fileName)}" style="max-width:100%;height:auto;">
       </div>`;
+    renderNavDirToggle();
     return;
   }
 
@@ -1300,6 +1301,7 @@ async function showBlob(path) {
         <div class="section-header" style="margin-top:8px;">${esc(path)}${copyPathBtn(path)}<span id="nav-dir-toggle-slot"></span></div>
         <div class="diff-empty">字幕を読み込めませんでした</div>
         <pre class="blob-container" style="padding:8px;white-space:pre-wrap;">${esc(data.content)}</pre>`;
+      renderNavDirToggle();
       return;
     }
     const cardsHtml = cues.map((c, i) => {
@@ -1362,6 +1364,11 @@ async function showBlob(path) {
     decorateTextNotes(blobView, path);
     renderUnresolvedPanel(blobView);
   }
+  // Re-render the nav-direction toggle now that the slot exists in the new
+  // innerHTML. For async branches (text/MD/SRT/code) the loadSiblings .then
+  // can resolve before the await fetchJson does, so the .then's render call
+  // hits a missing slot — this catches that race.
+  renderNavDirToggle();
 }
 
 function updateMdPref(key, value) {
