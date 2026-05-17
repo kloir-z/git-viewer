@@ -766,6 +766,8 @@ function wrapInlineRunIntoSentences(parent, nodes, ctx) {
     let text = n.nodeValue;
     let offsetBase = 0;
     let cur = n;
+    // splice の挿入位置を毎回進めて、nodes 配列の順序を DOM 順と一致させる
+    let insertAt = i + 1;
     MD_SENT_END.lastIndex = 0;
     let m;
     while ((m = MD_SENT_END.exec(text)) !== null) {
@@ -773,7 +775,8 @@ function wrapInlineRunIntoSentences(parent, nodes, ctx) {
       if (cut < cur.nodeValue.length) {
         const tail = cur.splitText(cut);
         flushAfter.add(cur);
-        nodes.splice(i + 1, 0, tail);
+        nodes.splice(insertAt, 0, tail);
+        insertAt++;
         offsetBase = m.index + m[0].length;
         cur = tail;
       } else {
