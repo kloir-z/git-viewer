@@ -2114,20 +2114,11 @@ function decorateTextNotes(blobView, path) {
   blobView.querySelectorAll('.code-line[data-bm-line]').forEach(line => {
     const lineNo = Number(line.getAttribute('data-bm-line'));
     const sec = linesByStart.get(lineNo);
-    const marker = document.createElement('span');
-    marker.className = 'note-marker ' + (sec ? 'has-note' : 'add-note');
-    marker.textContent = '💬';
-    marker.title = sec ? '編集' : 'メモを追加';
-    marker.onclick = (e) => {
-      e.stopPropagation();
-      if (sec) {
-        openNoteModal({ kind: 'lines', existing: sec });
-      } else {
-        const anchor = { kind: 'lines', start: lineNo, end: lineNo };
-        const snapshot = { kind: 'lines', start: lineNo, end: lineNo, text: line.textContent };
-        openNoteModal({ kind: 'lines', anchor, snapshot });
-      }
-    };
+    const marker = makeNoteMarker(sec, () => {
+      const anchor = { kind: 'lines', start: lineNo, end: lineNo };
+      const snapshot = { kind: 'lines', start: lineNo, end: lineNo, text: line.textContent };
+      openNoteModal({ kind: 'lines', anchor, snapshot });
+    });
     line.appendChild(marker);
   });
 }
@@ -2162,24 +2153,15 @@ function decorateSrtNotes(blobView, cues) {
     if (startMs == null || endMs == null) return;
     const key = `${startMs}-${endMs}`;
     const sec = byKey.get(key);
-    const marker = document.createElement('span');
-    marker.className = 'note-marker ' + (sec ? 'has-note' : 'add-note');
-    marker.textContent = '💬';
-    marker.title = sec ? '編集' : 'メモを追加';
-    marker.onclick = (e) => {
-      e.stopPropagation();
-      if (sec) {
-        openNoteModal({ kind: 'srt', existing: sec });
-      } else {
-        const anchor = { kind: 'srt', start_ms: startMs, end_ms: endMs };
-        const snapshot = {
-          kind: 'srt', start_ms: startMs, end_ms: endMs,
-          cue_index: cue.index ? Number(cue.index) : (idx + 1),
-          text: cue.text,
-        };
-        openNoteModal({ kind: 'srt', anchor, snapshot });
-      }
-    };
+    const marker = makeNoteMarker(sec, () => {
+      const anchor = { kind: 'srt', start_ms: startMs, end_ms: endMs };
+      const snapshot = {
+        kind: 'srt', start_ms: startMs, end_ms: endMs,
+        cue_index: cue.index ? Number(cue.index) : (idx + 1),
+        text: cue.text,
+      };
+      openNoteModal({ kind: 'srt', anchor, snapshot });
+    });
     const meta = cueEl.querySelector('.srt-meta');
     if (meta) meta.appendChild(marker);
   });
@@ -2235,14 +2217,7 @@ function decorateMdNotes(blobView) {
     }
     sec.anchor = { ...sec.anchor, index: resolvedIdx };
 
-    const marker = document.createElement('span');
-    marker.className = 'note-marker has-note';
-    marker.textContent = '💬';
-    marker.title = '編集';
-    marker.onclick = (e) => {
-      e.stopPropagation();
-      openNoteModal({ kind: 'md_sentence', existing: sec });
-    };
+    const marker = makeNoteMarker(sec, null);
     resolvedNode.appendChild(marker);
   }
 
@@ -2250,16 +2225,11 @@ function decorateMdNotes(blobView) {
     if (node.querySelector('.note-marker')) return;
     const idx = Number(node.getAttribute('data-bm-idx'));
     const text = node.textContent.trim();
-    const marker = document.createElement('span');
-    marker.className = 'note-marker add-note';
-    marker.textContent = '💬';
-    marker.title = 'メモを追加';
-    marker.onclick = (e) => {
-      e.stopPropagation();
+    const marker = makeNoteMarker(null, () => {
       const anchor = { kind: 'md_sentence', index: idx };
       const snapshot = { kind: 'md_sentence', index: idx, text };
       openNoteModal({ kind: 'md_sentence', anchor, snapshot });
-    };
+    });
     node.appendChild(marker);
   });
 
@@ -2324,6 +2294,117 @@ function openNoteModal(opts) {
   }
 }
 
+// --- Note markers + resolution status -------------------------------------
+
+const NOTE_STATUS_META = {
+  todo:    { label: '未反映' },
+  done:    { label: '反映済み' },
+  wontfix: { label: '反映不要' },
+};
+
+function noteStatusOf(sec) {
+  const r = sec && sec.snapshot && sec.snapshot.resolution;
+  const s = r && r.status;
+  return (s === 'done' || s === 'wontfix') ? s : 'todo';
+}
+
+// sec != null → has-note status dot (click opens the status popover).
+// sec == null → faint add-note ＋ (click runs onAdd to create a new note).
+function makeNoteMarker(sec, onAdd) {
+  const marker = document.createElement('span');
+  if (sec) {
+    const status = noteStatusOf(sec);
+    marker.className = `note-marker has-note status-${status}`;
+    marker.textContent = '●';
+    marker.title = `${NOTE_STATUS_META[status].label} · クリックで変更`;
+    marker.onclick = (e) => { e.stopPropagation(); openNotePopover(marker, sec); };
+  } else {
+    marker.className = 'note-marker add-note';
+    marker.textContent = '＋';
+    marker.title = 'メモを追加';
+    marker.onclick = (e) => { e.stopPropagation(); if (onAdd) onAdd(); };
+  }
+  return marker;
+}
+
+function nowIsoOffset() {
+  const d = new Date();
+  const p = n => String(n).padStart(2, '0');
+  const off = -d.getTimezoneOffset();
+  const sign = off >= 0 ? '+' : '-';
+  const oh = p(Math.floor(Math.abs(off) / 60));
+  const om = p(Math.abs(off) % 60);
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T` +
+         `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}${sign}${oh}:${om}`;
+}
+
+// Build the updated snapshot and persist via the existing PUT /api/notes.
+// status === 'todo' drops the resolution field (matches notes.py minimization).
+async function setNoteResolution(sec, status) {
+  const snap = Object.assign({}, sec.snapshot || {});
+  if (status === 'todo') {
+    delete snap.resolution;
+  } else {
+    const prevRef = sec.snapshot && sec.snapshot.resolution && sec.snapshot.resolution.ref;
+    snap.resolution = { status, resolved_at: nowIsoOffset() };
+    if (prevRef) snap.resolution.ref = prevRef;
+  }
+  const result = await putNote(sec.anchor, snap, sec.body);
+  if (result) await reloadCurrentBlob();
+}
+
+let activeNotePopover = null;
+function closeNotePopover() {
+  if (activeNotePopover) { activeNotePopover.remove(); activeNotePopover = null; }
+  document.removeEventListener('click', closeNotePopover, true);
+}
+
+function openNotePopover(markerEl, sec) {
+  closeNotePopover();
+  const current = noteStatusOf(sec);
+  const pop = document.createElement('div');
+  pop.className = 'note-popover';
+  pop.onclick = (e) => e.stopPropagation();
+
+  for (const st of ['todo', 'done', 'wontfix']) {
+    const item = document.createElement('div');
+    item.className = 'note-popover-item' + (st === current ? ' is-current' : '');
+    item.innerHTML =
+      `<span class="dot status-${st}">●</span>` +
+      `<span>${NOTE_STATUS_META[st].label}</span>` +
+      (st === current ? '<span class="check">✓</span>' : '');
+    item.onclick = async () => {
+      closeNotePopover();
+      if (st !== current) await setNoteResolution(sec, st);
+    };
+    pop.appendChild(item);
+  }
+
+  const sep = document.createElement('div');
+  sep.className = 'note-popover-sep';
+  pop.appendChild(sep);
+
+  const edit = document.createElement('div');
+  edit.className = 'note-popover-item';
+  edit.innerHTML = '<span>📝</span><span>メモを編集</span>';
+  edit.onclick = () => {
+    closeNotePopover();
+    openNoteModal({ kind: sec.anchor.kind, existing: sec });
+  };
+  pop.appendChild(edit);
+
+  document.body.appendChild(pop);
+  const r = markerEl.getBoundingClientRect();
+  const top = window.scrollY + r.bottom + 4;
+  let left = window.scrollX + r.left;
+  const maxLeft = window.scrollX + document.documentElement.clientWidth - pop.offsetWidth - 8;
+  if (left > maxLeft) left = maxLeft;
+  pop.style.top = `${top}px`;
+  pop.style.left = `${Math.max(8, left)}px`;
+  activeNotePopover = pop;
+  setTimeout(() => document.addEventListener('click', closeNotePopover, true), 0);
+}
+
 function formatAnchorLabel(a) {
   if (a.kind === 'lines') {
     return a.start === a.end ? `L${a.start}` : `L${a.start}-${a.end}`;
@@ -2375,23 +2456,14 @@ function decorateEmbeddedSrtNotes(container, cues) {
     if (startMs == null || endMs == null) return;
     const key = `${startMs}-${endMs}`;
     const sec = byKey.get(key);
-    const marker = document.createElement('span');
-    marker.className = 'note-marker ' + (sec ? 'has-note' : 'add-note');
-    marker.textContent = '💬';
-    marker.title = sec ? '編集' : 'メモを追加';
-    marker.onclick = (e) => {
-      e.stopPropagation();
-      if (sec) {
-        openNoteModal({ kind: 'srt', existing: sec });
-      } else {
-        const anchor = { kind: 'srt', start_ms: startMs, end_ms: endMs };
-        const snapshot = {
-          kind: 'srt', start_ms: startMs, end_ms: endMs,
-          cue_index: idx + 1, text: cue.text,
-        };
-        openNoteModal({ kind: 'srt', anchor, snapshot });
-      }
-    };
+    const marker = makeNoteMarker(sec, () => {
+      const anchor = { kind: 'srt', start_ms: startMs, end_ms: endMs };
+      const snapshot = {
+        kind: 'srt', start_ms: startMs, end_ms: endMs,
+        cue_index: idx + 1, text: cue.text,
+      };
+      openNoteModal({ kind: 'srt', anchor, snapshot });
+    });
     const meta = cueEl.querySelector('.srt-meta');
     if (meta) meta.appendChild(marker);
   });
