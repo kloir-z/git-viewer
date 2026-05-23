@@ -743,7 +743,22 @@ def _resolve_doc_server_side(doc, target_path, kind: str) -> bool:
                 mutated = True
             new_resolved.append(sec)
         doc.resolved = new_resolved
-    # md_sentence: no server-side changes
+    elif kind == 'md_sentence':
+        # 過去のクライアントバグで snapshot.text 末尾に marker の 💬 が混入していたケースを修復
+        for sec in list(doc.resolved) + list(doc.unresolved):
+            if sec.anchor.get("kind") != "md_sentence":
+                continue
+            if not isinstance(sec.snapshot, dict):
+                continue
+            text = sec.snapshot.get("text", "")
+            if not isinstance(text, str):
+                continue
+            cleaned = text.rstrip()
+            while cleaned.endswith("💬"):
+                cleaned = cleaned[:-len("💬")].rstrip()
+            if cleaned != text:
+                sec.snapshot["text"] = cleaned
+                mutated = True
 
     return mutated
 

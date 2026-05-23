@@ -1958,13 +1958,13 @@ function decorateMdNotes(blobView) {
   sentences.forEach(node => {
     if (node.querySelector('.note-marker')) return;
     const idx = Number(node.getAttribute('data-bm-idx'));
+    const text = node.textContent.trim();
     const marker = document.createElement('span');
     marker.className = 'note-marker add-note';
     marker.textContent = '💬';
     marker.title = 'メモを追加';
     marker.onclick = (e) => {
       e.stopPropagation();
-      const text = node.textContent.trim();
       const anchor = { kind: 'md_sentence', index: idx };
       const snapshot = { kind: 'md_sentence', index: idx, text };
       openNoteModal({ kind: 'md_sentence', anchor, snapshot });
