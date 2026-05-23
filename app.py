@@ -374,10 +374,15 @@ def tree():
     entries = []
     for item in target_dir.iterdir():
         rel = str(item.relative_to(repo_path)).replace("\\", "/")
+        try:
+            mtime = item.stat().st_mtime
+        except OSError:
+            mtime = 0.0
         entries.append({
             "name": item.name,
             "path": rel,
             "type": "tree" if item.is_dir() else "blob",
+            "mtime": mtime,
         })
     entries.sort(key=lambda e: (0 if e["type"] == "tree" else 1, e["name"].lower()))
     return jsonify(entries)

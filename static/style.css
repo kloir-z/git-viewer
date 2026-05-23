@@ -881,3 +881,151 @@ button:hover { background: var(--border); }
   .note-modal textarea,
   .edit-textarea { font-size: 16px; }
 }
+
+/* --- File row mtime --- */
+.list-row .file-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.list-row .file-mtime {
+  color: var(--text-dim);
+  font-size: 11px;
+  flex-shrink: 0;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- File sort UI --- */
+.sort-button {
+  font-size: 12px;
+  padding: 3px 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.sort-button:hover { background: var(--surface-hover); }
+.sort-button.overridden {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.sort-popover {
+  position: absolute;
+  z-index: 1000;
+  min-width: 280px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
+  color: var(--text);
+  font-size: 13px;
+}
+.sort-popover-title {
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.sort-priority-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.sort-priority-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+.sort-priority-idx {
+  color: var(--text-muted);
+  font-size: 11px;
+  min-width: 18px;
+}
+.sort-priority-label {
+  flex: 1;
+  font-weight: 500;
+}
+.sort-arrow, .sort-move, .sort-remove, .sort-add-btn {
+  background: var(--surface-hover);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 3px;
+  padding: 2px 6px;
+  font-size: 11px;
+  cursor: pointer;
+  line-height: 1.2;
+}
+.sort-arrow.active {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+}
+.sort-arrow:hover:not(.active),
+.sort-move:hover:not(:disabled),
+.sort-remove:hover:not(:disabled),
+.sort-add-btn:hover { background: var(--border); }
+.sort-move:disabled, .sort-remove:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+.sort-add-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.sort-add-row select {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 2px 4px;
+  font-size: 12px;
+}
+.sort-folders-first {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 0;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text);
+}
+.sort-popover-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+.sort-popover-actions button {
+  flex: 1 1 auto;
+  background: var(--surface-hover);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 3px;
+  padding: 4px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.sort-popover-actions button:hover:not(:disabled) { background: var(--border); }
+.sort-popover-actions button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
