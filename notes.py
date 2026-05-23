@@ -416,3 +416,85 @@ def delete_section(doc: NotesDoc, anchor: dict) -> bool:
             doc.unresolved.pop(i)
             return True
     return False
+
+
+from datetime import datetime, timedelta, timezone
+
+RESOLUTION_STATUSES = ("todo", "done", "wontfix")
+DEFAULT_RESOLUTION_STATUS = "todo"
+
+_JST = timezone(timedelta(hours=9))
+
+
+def _now_jst_iso() -> str:
+    s = datetime.now(_JST).strftime("%Y-%m-%dT%H:%M:%S%z")
+    return s[:-2] + ":" + s[-2:]
+
+
+def get_resolution(snapshot: dict | None) -> dict:
+    """Return the resolution dict for a snapshot.
+
+    Snapshots without a `resolution` field are treated as `{"status": "todo"}`.
+    Unknown status values fall back to the default. Always returns a fresh dict
+    so callers can mutate it without affecting the source snapshot.
+    """
+    if not isinstance(snapshot, dict):
+        return {"status": DEFAULT_RESOLUTION_STATUS}
+    res = snapshot.get("resolution")
+    if not isinstance(res, dict):
+        return {"status": DEFAULT_RESOLUTION_STATUS}
+    status = res.get("status")
+    if status not in RESOLUTION_STATUSES:
+        status = DEFAULT_RESOLUTION_STATUS
+    out = {"status": status}
+    resolved_at = res.get("resolved_at")
+    if isinstance(resolved_at, str) and resolved_at:
+        out["resolved_at"] = resolved_at
+    ref = res.get("ref")
+    if isinstance(ref, str) and ref:
+        out["ref"] = ref
+    return out
+
+
+def set_resolution(
+    snapshot: dict,
+    status: str,
+    ref: str | None = None,
+    resolved_at: str | None = None,
+) -> dict:
+    """Set the resolution on a snapshot in-place.
+
+    - `status` must be one of RESOLUTION_STATUSES.
+    - Setting status back to "todo" removes the `resolution` field entirely
+      (keeps snapshots minimal; missing == default todo).
+    - `resolved_at` defaults to now in JST (ISO-8601 with `+09:00` offset).
+    - `ref` is an optional free-form pointer (e.g. commit hash, PR url, note).
+
+    Returns the (mutated) snapshot for chaining.
+    """
+    if not isinstance(snapshot, dict):
+        raise TypeError("snapshot must be a dict")
+    if status not in RESOLUTION_STATUSES:
+        raise ValueError(
+            f"unknown status: {status!r} (expected one of {RESOLUTION_STATUSES})"
+        )
+    if status == DEFAULT_RESOLUTION_STATUS:
+        snapshot.pop("resolution", None)
+        return snapshot
+    res: dict = {"status": status, "resolved_at": resolved_at or _now_jst_iso()}
+    if ref:
+        res["ref"] = ref
+    snapshot["resolution"] = res
+    return snapshot
+
+
+def count_sections_by_status(doc: NotesDoc) -> dict[str, int]:
+    """Count sections grouped by resolution status across resolved + unresolved.
+
+    Sections without a snapshot are treated as `todo`.
+    """
+    counts = {s: 0 for s in RESOLUTION_STATUSES}
+    for sec in list(doc.resolved) + list(doc.unresolved):
+        status = get_resolution(sec.snapshot)["status"]
+        counts[status] = counts.get(status, 0) + 1
+    return counts

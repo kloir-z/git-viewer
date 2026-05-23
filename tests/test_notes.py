@@ -791,3 +791,141 @@ def test_notes_index_counts_sections(app_client):
     assert body["files"] == {"a.py": 2, "b.py": 2}  # only top-level
     resp2 = client.get("/api/notes/index?repo=myrepo&path=sub")
     assert resp2.get_json()["files"] == {"c.py": 1}
+
+
+from notes import (
+    RESOLUTION_STATUSES,
+    count_sections_by_status,
+    get_resolution,
+    set_resolution,
+)
+
+
+def test_get_resolution_missing_returns_default_todo():
+    assert get_resolution(None) == {"status": "todo"}
+    assert get_resolution({}) == {"status": "todo"}
+    assert get_resolution({"kind": "lines", "start": 1, "end": 1}) == {"status": "todo"}
+
+
+def test_get_resolution_returns_stored_fields():
+    snap = {
+        "kind": "srt", "start_ms": 0, "end_ms": 1,
+        "resolution": {
+            "status": "done",
+            "resolved_at": "2026-05-23T14:00:00+09:00",
+            "ref": "16a1943",
+        },
+    }
+    res = get_resolution(snap)
+    assert res == {
+        "status": "done",
+        "resolved_at": "2026-05-23T14:00:00+09:00",
+        "ref": "16a1943",
+    }
+
+
+def test_get_resolution_unknown_status_falls_back_to_todo():
+    snap = {"resolution": {"status": "garbage"}}
+    assert get_resolution(snap) == {"status": "todo"}
+
+
+def test_get_resolution_returns_fresh_dict():
+    """Callers must not be able to mutate the source snapshot via the result."""
+    snap = {"resolution": {"status": "done", "resolved_at": "x", "ref": "r"}}
+    out = get_resolution(snap)
+    out["status"] = "todo"
+    assert snap["resolution"]["status"] == "done"
+
+
+def test_set_resolution_done_with_ref():
+    snap = {"kind": "lines", "start": 1, "end": 1, "text": "x"}
+    set_resolution(snap, "done", ref="16a1943")
+    assert snap["resolution"]["status"] == "done"
+    assert snap["resolution"]["ref"] == "16a1943"
+    assert "resolved_at" in snap["resolution"]
+
+
+def test_set_resolution_wontfix_without_ref():
+    snap = {"kind": "srt", "start_ms": 0, "end_ms": 1}
+    set_resolution(snap, "wontfix")
+    assert snap["resolution"]["status"] == "wontfix"
+    assert "ref" not in snap["resolution"]
+
+
+def test_set_resolution_todo_removes_field():
+    snap = {"resolution": {"status": "done", "resolved_at": "x", "ref": "r"}}
+    set_resolution(snap, "todo")
+    assert "resolution" not in snap
+
+
+def test_set_resolution_rejects_unknown_status():
+    import pytest
+    with pytest.raises(ValueError):
+        set_resolution({}, "garbage")
+
+
+def test_set_resolution_explicit_timestamp_preserved():
+    snap = {}
+    set_resolution(snap, "done", ref="abc", resolved_at="2026-01-01T00:00:00+09:00")
+    assert snap["resolution"]["resolved_at"] == "2026-01-01T00:00:00+09:00"
+
+
+def test_resolution_survives_snapshot_roundtrip():
+    """Existing encode/decode/parse should preserve the resolution field unchanged."""
+    snap = {
+        "kind": "srt", "start_ms": 1000, "end_ms": 2000, "cue_index": 5, "text": "字幕",
+        "resolution": {
+            "status": "done",
+            "resolved_at": "2026-05-23T14:00:00+09:00",
+            "ref": "16a1943",
+        },
+    }
+    assert decode_snapshot(encode_snapshot(snap)) == snap
+
+
+def test_resolution_survives_serialize_parse_roundtrip():
+    original = NotesDoc(
+        title="Notes for output.srt",
+        resolved=[
+            NotesSection(
+                anchor={"kind": "srt", "start_ms": 0, "end_ms": 1},
+                snapshot={
+                    "kind": "srt", "start_ms": 0, "end_ms": 1, "text": "x",
+                    "resolution": {"status": "wontfix", "resolved_at": "2026-05-23T14:00:00+09:00"},
+                },
+                body="個人感想",
+            ),
+        ],
+    )
+    text = serialize_notes_md(original)
+    parsed = parse_notes_md(text)
+    assert get_resolution(parsed.resolved[0].snapshot) == {
+        "status": "wontfix",
+        "resolved_at": "2026-05-23T14:00:00+09:00",
+    }
+
+
+def test_count_sections_by_status_empty():
+    doc = NotesDoc()
+    assert count_sections_by_status(doc) == {s: 0 for s in RESOLUTION_STATUSES}
+
+
+def test_count_sections_by_status_mixed():
+    def mk(status):
+        snap = {"kind": "lines", "start": 1, "end": 1}
+        if status is not None:
+            set_resolution(snap, status, ref="x")
+        return NotesSection(anchor={"kind": "lines", "start": 1, "end": 1}, snapshot=snap, body="")
+
+    doc = NotesDoc(
+        resolved=[mk(None), mk("done"), mk("done"), mk("wontfix")],
+        unresolved=[mk(None), mk("done")],
+    )
+    counts = count_sections_by_status(doc)
+    assert counts == {"todo": 2, "done": 3, "wontfix": 1}
+
+
+def test_count_sections_by_status_treats_missing_snapshot_as_todo():
+    sec = NotesSection(anchor={"kind": "lines", "start": 1, "end": 1}, snapshot=None, body="")
+    doc = NotesDoc(resolved=[sec])
+    assert count_sections_by_status(doc) == {"todo": 1, "done": 0, "wontfix": 0}
