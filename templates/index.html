@@ -608,6 +608,10 @@ async function setupSrtEmbed(audioPath) {
   decorateEmbeddedSrtNotes(container, cues);
 }
 
+// While a note modal is open, suppress SRT auto-scroll so the modal
+// (and the user's textarea focus on mobile) doesn't get yanked around.
+let activeNoteModals = 0;
+
 function setupSrtSync(audio, container, cues) {
   const cueEls = container.querySelectorAll('.srt-cue');
   const isVideo = audio.tagName === 'VIDEO';
@@ -652,7 +656,7 @@ function setupSrtSync(audio, container, cues) {
     const el = cueEls[idx];
     if (!el) return;
     el.classList.add('current');
-    if (followEnabled && !isVideo) {
+    if (followEnabled && !isVideo && activeNoteModals === 0) {
       // Suppress scroll events fired by smooth scrollIntoView so the manual-
       // scroll handler does not misread them as user input and pause follow.
       programmaticScrollUntil = performance.now() + 800;
@@ -1999,11 +2003,18 @@ function openNoteModal(opts) {
       </div>
     </div>`;
   document.body.appendChild(backdrop);
+  activeNoteModals++;
   const textarea = backdrop.querySelector('.note-body');
   textarea.value = initialBody;
   textarea.focus();
 
-  const close = () => backdrop.remove();
+  let closed = false;
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    activeNoteModals = Math.max(0, activeNoteModals - 1);
+    backdrop.remove();
+  };
   backdrop.onclick = close;
   backdrop.querySelector('.btn-cancel').onclick = close;
   backdrop.querySelector('.btn-save').onclick = async () => {
