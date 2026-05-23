@@ -855,6 +855,56 @@ button:hover { background: var(--border); }
   vertical-align: middle;
 }
 
+/* Status chip shown next to *.notes.md section headings */
+.notes-md-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  padding: 1px 6px;
+  font-size: 11px;
+  font-weight: normal;
+  line-height: 1.4;
+  border-radius: 10px;
+  vertical-align: middle;
+  cursor: pointer;
+  user-select: none;
+  background: rgba(110, 118, 129, 0.15);
+  border: 1px solid rgba(110, 118, 129, 0.4);
+}
+.notes-md-status:hover { filter: brightness(1.2); }
+.notes-md-status .dot { font-size: 10px; line-height: 1; }
+.notes-md-status.status-todo {
+  color: #f0c04a;
+  background: rgba(240, 192, 74, 0.12);
+  border-color: rgba(240, 192, 74, 0.45);
+}
+.notes-md-status.status-done {
+  color: #3fb950;
+  background: rgba(63, 185, 80, 0.12);
+  border-color: rgba(63, 185, 80, 0.45);
+}
+.notes-md-status.status-wontfix {
+  color: #8b949e;
+  background: rgba(110, 118, 129, 0.15);
+  border-color: rgba(110, 118, 129, 0.45);
+}
+
+/* Inline snapshot quote shown under each *.notes.md section heading so users
+   can see what the note was attached to without opening the edit view. */
+.markdown-body .notes-md-snippet {
+  margin: 6px 0 10px 0;
+  padding: 6px 10px;
+  background: rgba(88, 166, 255, 0.06);
+  border-left: 3px solid rgba(88, 166, 255, 0.5);
+  border-radius: 0 4px 4px 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .note-modal-backdrop {
   position: fixed; top: 0; left: 0; right: 0; bottom: 0;
   background: rgba(0, 0, 0, 0.6);

@@ -1585,9 +1585,20 @@ async function showBlob(path) {
     });
     const bm = await fetchBookmark(path);
     applyBookmarkUi(blobView, bm);
-    await fetchNotes(path);
-    decorateMdNotes(mdBody);
-    renderUnresolvedPanel(blobView);
+    if (path.endsWith('.notes.md')) {
+      // Viewing a *.notes.md directly. Fetch via the target path so we get
+      // parsed sections + resolution. Skip the regular markdown note
+      // decoration (which would add nonsensical "+" markers to every heading
+      // and target the wrong bm-idx numbering) and the unresolved panel.
+      const target = path.slice(0, -'.notes.md'.length);
+      await fetchNotes(target);
+      notesState.viewPath = path;
+      decorateNotesMdView(mdBody);
+    } else {
+      await fetchNotes(path);
+      decorateMdNotes(mdBody);
+      renderUnresolvedPanel(blobView);
+    }
   } else if (fileExt === '.srt') {
     const cues = parseSrt(data.content);
     if (cues.length === 0) {
@@ -2308,6 +2319,101 @@ function noteStatusOf(sec) {
   return (s === 'done' || s === 'wontfix') ? s : 'todo';
 }
 
+// Mirrors notes.py:_anchor_key — returns a string usable as Map key.
+function anchorKeyJs(a) {
+  if (!a || !a.kind) return '';
+  if (a.kind === 'lines') return `lines:${a.start}:${a.end}`;
+  if (a.kind === 'md_sentence') return `md_sentence:${a.index}`;
+  if (a.kind === 'srt') return `srt:${a.start_ms}:${a.end_ms}`;
+  return a.kind;
+}
+
+// Mirrors notes.py:parse_anchor_heading. Returns null if heading text doesn't
+// match any known anchor pattern.
+const _HD_LINES = /^L(\d+)(?:-(\d+))?$/;
+const _HD_MD = /^S(\d+)(?:\s+"((?:[^"\\]|\\.)*)")?$/;
+const _HD_SRT = /^(\d{2}):(\d{2}):(\d{2})[,.](\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2})[,.](\d{3})$/;
+function parseAnchorHeadingText(text) {
+  const t = (text || '').trim();
+  if (!t || t === 'Unresolved') return null;
+  let m = _HD_LINES.exec(t);
+  if (m) {
+    const start = +m[1];
+    const end = m[2] ? +m[2] : start;
+    return { kind: 'lines', start, end };
+  }
+  m = _HD_MD.exec(t);
+  if (m) {
+    const raw = m[2] || '';
+    return {
+      kind: 'md_sentence',
+      index: +m[1],
+      heading_text: raw.replace(/\\(.)/g, '$1'),
+    };
+  }
+  m = _HD_SRT.exec(t);
+  if (m) {
+    const ms = (h, mn, s, msv) => ((+h * 60 + +mn) * 60 + +s) * 1000 + +msv;
+    return {
+      kind: 'srt',
+      start_ms: ms(m[1], m[2], m[3], m[4]),
+      end_ms: ms(m[5], m[6], m[7], m[8]),
+    };
+  }
+  return null;
+}
+
+// Decorate the rendered Markdown of a *.notes.md file with status badges per
+// section heading. Each badge is clickable and opens the existing status
+// popover (which reuses setNoteResolution → notesState.path = target file).
+function decorateNotesMdView(mdBody) {
+  if (!mdBody) return;
+  const byKey = new Map();
+  for (const sec of notesState.resolved || []) byKey.set(anchorKeyJs(sec.anchor), sec);
+  for (const sec of notesState.unresolved || []) {
+    const k = anchorKeyJs(sec.anchor);
+    if (!byKey.has(k)) byKey.set(k, sec);
+  }
+  if (byKey.size === 0) return;
+
+  const headingText = (h) => {
+    // Concatenate direct text content only, skipping any child elements
+    // (e.g. existing note markers or our own badge from a re-decoration).
+    let s = '';
+    for (const n of h.childNodes) {
+      if (n.nodeType === 3) s += n.nodeValue;
+    }
+    return s.trim();
+  };
+  for (const h of mdBody.querySelectorAll('h2, h3')) {
+    if (h.querySelector('.notes-md-status')) continue;
+    const anchor = parseAnchorHeadingText(headingText(h));
+    if (!anchor) continue;
+    const sec = byKey.get(anchorKeyJs(anchor));
+    if (!sec) continue;
+    const status = noteStatusOf(sec);
+    const badge = document.createElement('span');
+    badge.className = `notes-md-status status-${status}`;
+    badge.innerHTML = `<span class="dot">●</span><span>${NOTE_STATUS_META[status].label}</span>`;
+    badge.title = `${NOTE_STATUS_META[status].label} · クリックで変更`;
+    badge.onclick = (e) => { e.stopPropagation(); openNotePopover(badge, sec); };
+    h.appendChild(badge);
+
+    // Inline-display the snapshot text (what the note was attached to) so
+    // users don't have to open the edit view to remember the original quote.
+    if (sec.snapshot && typeof sec.snapshot.text === 'string' && sec.snapshot.text.trim()) {
+      // Avoid duplicating if a previous decoration already inserted one.
+      const next = h.nextElementSibling;
+      if (!next || !next.classList.contains('notes-md-snippet')) {
+        const snippet = document.createElement('blockquote');
+        snippet.className = 'notes-md-snippet';
+        snippet.textContent = sec.snapshot.text;
+        h.insertAdjacentElement('afterend', snippet);
+      }
+    }
+  }
+}
+
 // sec != null → has-note status dot (click opens the status popover).
 // sec == null → faint add-note ＋ (click runs onAdd to create a new note).
 function makeNoteMarker(sec, onAdd) {
@@ -2437,8 +2543,12 @@ async function reloadCurrentBlob() {
     await reloadEmbedNotes();
     return;
   }
-  if (notesState.path) {
-    await showBlob(notesState.path);
+  // When viewing a *.notes.md directly, notesState.path is the *target* file
+  // (so PUT/DELETE go to the right place), but the user is still looking at
+  // the notes.md — reload that instead.
+  const displayPath = notesState.viewPath || notesState.path;
+  if (displayPath) {
+    await showBlob(displayPath);
   }
 }
 
