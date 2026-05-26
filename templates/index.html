@@ -963,6 +963,103 @@ function setupSrtSync(audio, container, cues) {
   });
 }
 
+// --- Chapter index (irodori chapters.json) ---
+// irodori_test が output.mp3 と同階層に吐く chapters.json (章の見出し + 時刻範囲) を
+// 読み、目次パネルを描画する。再生位置で現在章をハイライトし、クリックでその章へ seek。
+// SRT の同期スクロールと併存する「地図」(irodori_video の一覧カードの移植)。
+const CHAPTER_SPEAKER_LABEL = { sota: 'ソウタ', kotoha: 'コトハ' };
+
+function fmtClock(sec) {
+  if (!Number.isFinite(sec)) return '--:--';
+  const total = Math.floor(sec);
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+async function loadSiblingChapters(audioPath) {
+  const slash = audioPath.lastIndexOf('/');
+  const dir = slash >= 0 ? audioPath.slice(0, slash + 1) : '';
+  const data = await fetchJson(
+    `/api/blob?repo=${encodeURIComponent(currentRepo)}&path=${encodeURIComponent(dir + 'chapters.json')}`
+  );
+  if (data && typeof data.content === 'string') {
+    try {
+      const arr = JSON.parse(data.content);
+      return Array.isArray(arr) && arr.length ? arr : null;
+    } catch { return null; }
+  }
+  return null;
+}
+
+async function setupChapterNav(audioPath) {
+  // Capture refs before await (same rapid file-switch hazard as setupSrtEmbed).
+  const panel = document.getElementById('chapter-nav');
+  const audio = document.getElementById('audio-player');
+  if (!panel || !audio) return;
+
+  const chapters = await loadSiblingChapters(audioPath);
+  if (!chapters) return;
+
+  const rows = chapters.map((ch, i) => {
+    const label = CHAPTER_SPEAKER_LABEL[ch.speaker] || ch.speaker || '';
+    const color = speakerColor(label);
+    const styleAttr = color ? ` style="--speaker-color: ${color};"` : '';
+    const no = String(ch.index != null ? ch.index : i + 1).padStart(2, '0');
+    const sub = ch.sub ? `<span class="chapter-sub">${esc(ch.sub)}</span>` : '';
+    const spk = label ? `<span class="chapter-spk">${esc(label)}</span>` : '';
+    return `<button type="button" class="chapter-item" data-idx="${i}" data-start="${ch.start}"${styleAttr}>
+      <span class="chapter-no">${no}</span>
+      <span class="chapter-time">${fmtClock(ch.start)}</span>
+      <span class="chapter-body"><span class="chapter-headline">${esc(ch.headline || '')}</span>${sub}</span>
+      ${spk}
+    </button>`;
+  }).join('');
+  panel.innerHTML = `<div class="chapter-nav-header chapter-nav-toggle">章 (${chapters.length})</div><div class="chapter-nav-list">${rows}</div>`;
+
+  panel.querySelector('.chapter-nav-toggle')
+    .addEventListener('click', () => panel.classList.toggle('collapsed'));
+
+  const items = Array.from(panel.querySelectorAll('.chapter-item'));
+  let curIdx = -1;
+
+  // 章は連続 (各章 end ≒ 次章 start)。pause の隙間では「直前の章」を保つため、
+  // start <= t を満たす最後の章を現在章とする。
+  const chapterAt = (t) => {
+    let idx = -1;
+    for (let i = 0; i < chapters.length; i++) {
+      if (t >= chapters[i].start) idx = i; else break;
+    }
+    return idx;
+  };
+
+  const update = () => {
+    const idx = chapterAt(audio.currentTime);
+    if (idx === curIdx) return;
+    if (curIdx >= 0 && items[curIdx]) items[curIdx].classList.remove('current');
+    curIdx = idx;
+    if (idx < 0 || !items[idx]) return;
+    items[idx].classList.add('current');
+    if (!panel.classList.contains('collapsed')) {
+      items[idx].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  };
+
+  audio.addEventListener('timeupdate', update);
+  audio.addEventListener('seeked', update);
+
+  items.forEach((el) => {
+    el.addEventListener('click', () => {
+      const sec = parseFloat(el.dataset.start);
+      if (!Number.isFinite(sec)) return;
+      audio.currentTime = sec;
+      audio.play().catch(() => {});
+    });
+  });
+
+  update();
+}
+
 // --- Bookmark helpers ---
 async function fetchBookmark(path) {
   try {
@@ -1493,10 +1590,12 @@ async function showBlob(path) {
       <div class="blob-container" style="padding:8px;">
         <video id="audio-player" controls preload="metadata" src="${blobUrl}"${autoplayMedia?' autoplay':''} style="width:100%; max-height:70vh; background:#000;"></video>
         <div id="playback-log-list" class="playback-log"></div>
+        <div id="chapter-nav" class="chapter-nav"></div>
         <div id="srt-embed" class="srt-embed-container"></div>
       </div>`;
     wireAutoplayToggle();
     setupPlaybackLog(path);
+    setupChapterNav(path);
     setupSrtEmbed(path);
     return;
   }
@@ -1509,12 +1608,14 @@ async function showBlob(path) {
       <div class="blob-container" style="padding:8px;">
         <audio id="audio-player" controls preload="metadata" src="${blobUrl}"${audioAutoplay?' autoplay':''} style="width:100%;"></audio>
         <div id="playback-log-list" class="playback-log"></div>
+        <div id="chapter-nav" class="chapter-nav"></div>
         <div id="srt-embed" class="srt-embed-container"></div>
       </div>`;
     wireAutoplayToggle();
     wireContinuousToggle();
     setupAudioContinuous();
     setupPlaybackLog(path);
+    setupChapterNav(path);
     setupSrtEmbed(path);
     return;
   }

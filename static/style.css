@@ -688,6 +688,92 @@ button:hover { background: var(--border); }
   color: var(--text);
 }
 
+/* === Chapter index (irodori chapters.json) === */
+.chapter-nav {
+  margin-top: 10px;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+.chapter-nav:empty { display: none; }
+.chapter-nav-header {
+  color: var(--text-muted);
+  font-size: 11px;
+  margin-bottom: 6px;
+  cursor: pointer;
+  user-select: none;
+}
+.chapter-nav-toggle::before {
+  content: '▶';
+  display: inline-block;
+  margin-right: 4px;
+  font-size: 9px;
+  color: var(--text-dim);
+  transition: transform 120ms;
+}
+.chapter-nav:not(.collapsed) .chapter-nav-toggle::before { transform: rotate(90deg); }
+.chapter-nav.collapsed .chapter-nav-list { display: none; }
+.chapter-nav-list {
+  max-height: 30vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.chapter-item {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  background: var(--surface);
+  border: none;
+  border-left: 3px solid transparent;
+  border-radius: 4px;
+  padding: 6px 10px;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  transition: background-color 120ms, border-left-color 120ms;
+}
+.chapter-item:hover { background: var(--surface-hover); }
+.chapter-item.current {
+  background: var(--surface-hover);
+  border-left-color: var(--speaker-color, var(--accent));
+  box-shadow: 0 0 0 1px var(--speaker-color, var(--border)) inset;
+}
+.chapter-no {
+  color: var(--text-dim);
+  font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+  font-size: 11px;
+  min-width: 1.6em;
+  flex-shrink: 0;
+}
+.chapter-time {
+  color: var(--text-muted);
+  font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+  font-size: 11px;
+  min-width: 3.2em;
+  flex-shrink: 0;
+}
+.chapter-body { flex: 1; min-width: 0; }
+.chapter-headline { font-size: 13px; }
+.chapter-item.current .chapter-headline { font-weight: 600; }
+.chapter-sub {
+  color: var(--text-muted);
+  font-size: 11px;
+  margin-left: 6px;
+}
+.chapter-spk {
+  background: var(--speaker-color, var(--border));
+  color: #fff;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 600;
+  flex-shrink: 0;
+  align-self: center;
+}
+
 .playback-log {
   margin-top: 10px;
   border-top: 1px solid var(--border);
