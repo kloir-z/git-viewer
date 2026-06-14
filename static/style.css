@@ -94,6 +94,21 @@ button:hover { background: var(--border); }
   min-height: 0;
 }
 
+/* Scrollbars: 背景に溶け込ませる (track 透明 + thumb は控えめなボーダー色) */
+* {
+  scrollbar-width: thin;                       /* Firefox */
+  scrollbar-color: var(--border) transparent;  /* thumb / track */
+}
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border: 2px solid var(--bg);   /* bg 色の縁取りで溶け込ませる */
+  border-radius: 6px;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
+::-webkit-scrollbar-corner { background: transparent; }
+
 /* Status bar */
 .status-bar {
   display: flex;
@@ -688,11 +703,51 @@ button:hover { background: var(--border); }
   color: var(--text);
 }
 
+/* === 浮遊ミニプレーヤー (音声) === */
+/* 枠の中ではなく画面右下に固定で浮かせる。長い字幕を下までスクロールしても常に見えるので
+   一時停止できる。字幕と多少被ってよい。狭い画面では横幅いっぱいに広げる。 */
+/* div ラッパで浮かせ、中の <audio> を width:100% で埋める。<audio> 自体を伸ばすと
+   置換要素なので calc 幅依存になり iPhone 等で左が切れるため、ラッパ(非置換)で伸ばす。 */
+.audio-float {
+  position: fixed;
+  right: 12px;
+  bottom: 12px;
+  z-index: 40;
+  box-sizing: border-box;
+  width: 300px;
+  max-width: calc(100vw - 24px);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  padding: 6px;
+}
+.audio-float audio { display: block; width: 100%; }
+/* 狭い画面は左右いっぱい。div ラッパなので left/right 指定で素直に伸びる。
+   セーフエリア (ノッチ/ホームインジケータ) も避ける。 */
+@media (max-width: 600px) {
+  .audio-float {
+    width: auto;
+    max-width: none;
+    left: max(8px, env(safe-area-inset-left));
+    right: max(8px, env(safe-area-inset-right));
+    bottom: max(8px, env(safe-area-inset-bottom));
+  }
+}
 /* === Chapter index (irodori chapters.json) === */
+/* 再生中もスクロールに追従して上端に貼り付く (章が見切れないように)。
+   その下で字幕ハイライトも見える単一スクロール構成。 */
 .chapter-nav {
+  position: sticky;
+  /* top:0 だと .content の padding-top(8px) 分だけ上に隙間が空き、そこから下の字幕が
+     ちら見えする。padding 分だけ負に引いてトップバー直下にぴったり貼り付ける。 */
+  top: -8px;
+  z-index: 2;
   margin-top: 10px;
+  padding: 8px 0;
   border-top: 1px solid var(--border);
-  padding-top: 8px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
 }
 .chapter-nav:empty { display: none; }
 .chapter-nav-header {
@@ -713,12 +768,46 @@ button:hover { background: var(--border); }
 .chapter-nav:not(.collapsed) .chapter-nav-toggle::before { transform: rotate(90deg); }
 .chapter-nav.collapsed .chapter-nav-list { display: none; }
 .chapter-nav-list {
+  /* 既定は内容にフィットしつつ max-height で上限 (自動)。下端のハンドルバーをドラッグして
+     手動リサイズでき (マウス/タッチ両対応、JS)、その時 .user-sized が付いて上限を緩める。 */
   max-height: 30vh;
+  min-height: 56px;
   overflow-y: auto;
+  /* iOS でタッチスクロールがこのリスト自身に効くように。touch-action でこの要素が縦パンを
+     担うと宣言し、overscroll-behavior で裏のページ(字幕)への連鎖を断つ。 */
+  touch-action: pan-y;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
+/* スマホは縦が狭いので少し高めに振る */
+@media (max-width: 600px) {
+  .chapter-nav-list { max-height: 40vh; }
+}
+.chapter-nav-list.user-sized {
+  max-height: 85vh;   /* 手動サイズ時はドラッグ可動域を広げる (height は inline で指定) */
+}
+/* 高さ調整ハンドル (全幅の控えめなバー。タッチでも掴めるよう touch-action: none) */
+.chapter-nav-resize {
+  height: 14px;
+  cursor: ns-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: none;
+}
+.chapter-nav-resize::before {
+  content: '';
+  width: 40px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--border);
+  opacity: 0.5;
+  transition: opacity 120ms, background-color 120ms;
+}
+.chapter-nav-resize:hover::before { opacity: 1; background: var(--text-dim); }
 .chapter-item {
   display: flex;
   align-items: baseline;
@@ -762,16 +851,6 @@ button:hover { background: var(--border); }
   color: var(--text-muted);
   font-size: 11px;
   margin-left: 6px;
-}
-.chapter-spk {
-  background: var(--speaker-color, var(--border));
-  color: #fff;
-  padding: 1px 8px;
-  border-radius: 10px;
-  font-size: 10px;
-  font-weight: 600;
-  flex-shrink: 0;
-  align-self: center;
 }
 
 .playback-log {
@@ -825,26 +904,19 @@ button:hover { background: var(--border); }
   display: none;
 }
 .srt-embed-container {
+  /* 入れ子スクロールはやめ、.content 単一スクロールで流す (章 sticky と噛み合わせるため)。
+     自動スクロールは setupSrtSync が章パネル下端を避けて位置決めする。 */
   margin-top: 10px;
   border-top: 1px solid var(--border);
   padding-top: 8px;
-  max-height: 60vh;
-  overflow-y: auto;
+  /* 右下の浮遊プレーヤーの高さぶん下に余白を作り、最後の字幕も隠れず読めるようにする */
+  padding-bottom: 84px;
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 .srt-embed-container:empty {
   display: none;
-}
-.srt-embed-header {
-  position: sticky;
-  top: 0;
-  background: var(--bg);
-  color: var(--text-muted);
-  font-size: 11px;
-  padding: 4px 0;
-  z-index: 1;
 }
 .srt-embed-empty {
   color: var(--text-dim);

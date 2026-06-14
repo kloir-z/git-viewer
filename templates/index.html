@@ -818,15 +818,24 @@ function parseSrt(text) {
   return cues;
 }
 
+const SPEAKER_COLOR_OVERRIDES = {
+  'ソウタ': 'hsl(210, 70%, 60%)',   // 青
+  'リン': 'hsl(340, 70%, 62%)',     // ローズ (青と十分コントラスト)。kotoha→rin 交代でハッシュ色が青に近接した実害を固定色で回避 (2026-06-14)
+};
 function speakerColor(name) {
   if (!name) return '';
-  // FNV-1a 32bit — 1文字違いでも hue が広く散るように
+  if (SPEAKER_COLOR_OVERRIDES[name]) return SPEAKER_COLOR_OVERRIDES[name];
+  // FNV-1a 32bit → golden-angle で hue を散らし、S/L にも上位ビットを混ぜて
+  // `% 360` の近接コリジョン（例: コトハ/ソウタ）を回避する
   let h = 2166136261 >>> 0;
   for (let i = 0; i < name.length; i++) {
     h ^= name.charCodeAt(i);
     h = Math.imul(h, 16777619) >>> 0;
   }
-  return `hsl(${h % 360}, 55%, 60%)`;
+  const hue = (h * 137.508) % 360;
+  const sat = 50 + ((h >>> 16) & 0x1f); // 50–81%
+  const lig = 55 + ((h >>> 24) & 0x0f); // 55–70%
+  return `hsl(${hue.toFixed(1)}, ${sat}%, ${lig}%)`;
 }
 
 function timeToSeconds(tc) {
@@ -875,16 +884,14 @@ async function setupSrtEmbed(audioPath) {
   const cardsHtml = cues.map(c => {
     const color = speakerColor(c.speaker);
     const styleAttr = color ? ` style="--speaker-color: ${color};"` : '';
-    const speakerBadge = c.speaker ? `<span class="srt-speaker">${esc(c.speaker)}</span>` : '';
     const timeStr = (c.start && c.end) ? `${esc(c.start)} → ${esc(c.end)}` : '--';
     return `<div class="srt-cue" data-start="${c.startSec}" data-end="${c.endSec}"${styleAttr}>
-      <div class="srt-meta"><span class="srt-time">${timeStr}</span>${speakerBadge}</div>
+      <div class="srt-meta"><span class="srt-time">${timeStr}</span></div>
       <div class="srt-text">${esc(c.text)}</div>
     </div>`;
   }).join('');
 
-  const srtName = result.path.split('/').pop();
-  container.innerHTML = `<div class="srt-embed-header">字幕 (<span class="srt-embed-filename">${esc(srtName)}</span>)</div>${cardsHtml}`;
+  container.innerHTML = cardsHtml;
 
   setupSrtSync(audio, container, cues);
 
@@ -906,6 +913,10 @@ function setupSrtSync(audio, container, cues) {
   let programmaticScrollUntil = 0;
   let manualPauseTimer = null;
 
+  // 字幕は入れ子スクロールをやめ .content 単一スクロールで流す。手動スクロール検知も
+  // .content に張る (file 切替の度に重複登録しないよう、前回ハンドラを差し替える)。
+  const scroller = document.querySelector('.content');
+
   const resumeFollow = () => {
     followEnabled = true;
     clearTimeout(manualPauseTimer);
@@ -917,10 +928,17 @@ function setupSrtSync(audio, container, cues) {
     manualPauseTimer = setTimeout(resumeFollow, 5000);
   };
 
-  container.addEventListener('scroll', () => {
-    if (performance.now() < programmaticScrollUntil) return;
-    pauseFromManualScroll();
-  }, { passive: true });
+  if (scroller) {
+    if (scroller._srtFollowScrollHandler) {
+      scroller.removeEventListener('scroll', scroller._srtFollowScrollHandler);
+    }
+    const onScroll = () => {
+      if (performance.now() < programmaticScrollUntil) return;
+      pauseFromManualScroll();
+    };
+    scroller._srtFollowScrollHandler = onScroll;
+    scroller.addEventListener('scroll', onScroll, { passive: true });
+  }
 
   const findIdx = (t) => {
     if (currentIdx >= 0 && currentIdx < cues.length) {
@@ -942,11 +960,17 @@ function setupSrtSync(audio, container, cues) {
     const el = cueEls[idx];
     if (!el) return;
     el.classList.add('current');
-    if (followEnabled && !isVideo && activeNoteModals === 0) {
-      // Suppress scroll events fired by smooth scrollIntoView so the manual-
-      // scroll handler does not misread them as user input and pause follow.
+    if (followEnabled && !isVideo && activeNoteModals === 0 && scroller) {
+      // 上部固定の章帯の下端より少し下に現在 cue が来るようスクロール (中央寄せだと
+      // 背の高い章帯の裏に隠れるため)。章が無い (帯非表示) 時は navH=0 で素直に上寄せ。
+      const navEl = document.getElementById('chapter-nav');
+      const navH = navEl ? navEl.offsetHeight : 0;
+      const offsetTop = el.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+      const target = scroller.scrollTop + offsetTop - navH - 16;
+      // Suppress scroll events fired by the smooth scroll so the manual-scroll
+      // handler does not misread them as user input and pause follow.
       programmaticScrollUntil = performance.now() + 800;
-      el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      scroller.scrollTo({ top: Math.max(0, target), behavior: 'smooth' });
     }
   };
 
@@ -967,7 +991,7 @@ function setupSrtSync(audio, container, cues) {
 // irodori_test が output.mp3 と同階層に吐く chapters.json (章の見出し + 時刻範囲) を
 // 読み、目次パネルを描画する。再生位置で現在章をハイライトし、クリックでその章へ seek。
 // SRT の同期スクロールと併存する「地図」(irodori_video の一覧カードの移植)。
-const CHAPTER_SPEAKER_LABEL = { sota: 'ソウタ', kotoha: 'コトハ' };
+const CHAPTER_SPEAKER_LABEL = { sota: 'ソウタ', rin: 'リン', kotoha: 'コトハ' };
 
 function fmtClock(sec) {
   if (!Number.isFinite(sec)) return '--:--';
@@ -1002,23 +1026,55 @@ async function setupChapterNav(audioPath) {
   if (!chapters) return;
 
   const rows = chapters.map((ch, i) => {
+    // 話者バッジ(ソウタ/コトハ)は表示しないが、現在章の左ボーダー色には話者色を流用する。
     const label = CHAPTER_SPEAKER_LABEL[ch.speaker] || ch.speaker || '';
     const color = speakerColor(label);
     const styleAttr = color ? ` style="--speaker-color: ${color};"` : '';
     const no = String(ch.index != null ? ch.index : i + 1).padStart(2, '0');
     const sub = ch.sub ? `<span class="chapter-sub">${esc(ch.sub)}</span>` : '';
-    const spk = label ? `<span class="chapter-spk">${esc(label)}</span>` : '';
     return `<button type="button" class="chapter-item" data-idx="${i}" data-start="${ch.start}"${styleAttr}>
       <span class="chapter-no">${no}</span>
       <span class="chapter-time">${fmtClock(ch.start)}</span>
       <span class="chapter-body"><span class="chapter-headline">${esc(ch.headline || '')}</span>${sub}</span>
-      ${spk}
     </button>`;
   }).join('');
-  panel.innerHTML = `<div class="chapter-nav-header chapter-nav-toggle">章 (${chapters.length})</div><div class="chapter-nav-list">${rows}</div>`;
+  panel.innerHTML = `<div class="chapter-nav-header chapter-nav-toggle">章 (${chapters.length})</div><div class="chapter-nav-list">${rows}</div><div class="chapter-nav-resize" title="ドラッグで高さ調整"></div>`;
 
   panel.querySelector('.chapter-nav-toggle')
     .addEventListener('click', () => panel.classList.toggle('collapsed'));
+
+  // 章リストは内部スクロールを持ち、下端ハンドルをドラッグして高さ調整できる (PC/スマホ共通、
+  // Pointer Events でマウス/タッチ両対応)。値は localStorage に保存して次回・別ファイルでも維持。
+  const list = panel.querySelector('.chapter-nav-list');
+  {
+    const applyH = (h) => { list.classList.add('user-sized'); list.style.height = h + 'px'; };
+    const savedH = parseInt(localStorage.getItem('chapterNavHeight') || '', 10);
+    if (Number.isFinite(savedH) && savedH >= 56) applyH(savedH);
+
+    const handle = panel.querySelector('.chapter-nav-resize');
+    const maxH = () => Math.round(window.innerHeight * 0.85);
+    let dragging = false, dragStartY = 0, dragStartH = 0;
+    handle.addEventListener('pointerdown', (e) => {
+      dragging = true;
+      dragStartY = e.clientY;
+      dragStartH = list.getBoundingClientRect().height;
+      handle.setPointerCapture(e.pointerId);
+      e.preventDefault();
+    });
+    handle.addEventListener('pointermove', (e) => {
+      if (!dragging) return;
+      applyH(Math.max(56, Math.min(maxH(), Math.round(dragStartH + (e.clientY - dragStartY)))));
+    });
+    const endDrag = (e) => {
+      if (!dragging) return;
+      dragging = false;
+      try { handle.releasePointerCapture(e.pointerId); } catch (err) {}
+      const h = parseInt(list.style.height || '', 10);
+      if (Number.isFinite(h)) localStorage.setItem('chapterNavHeight', String(h));
+    };
+    handle.addEventListener('pointerup', endDrag);
+    handle.addEventListener('pointercancel', endDrag);
+  }
 
   const items = Array.from(panel.querySelectorAll('.chapter-item'));
   let curIdx = -1;
@@ -1040,6 +1096,7 @@ async function setupChapterNav(audioPath) {
     curIdx = idx;
     if (idx < 0 || !items[idx]) return;
     items[idx].classList.add('current');
+    // 内部スクロールするリスト内で現在章が見えるよう追従 (リスト内スクロールのみ)。
     if (!panel.classList.contains('collapsed')) {
       items[idx].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     }
@@ -1048,12 +1105,22 @@ async function setupChapterNav(audioPath) {
   audio.addEventListener('timeupdate', update);
   audio.addEventListener('seeked', update);
 
-  items.forEach((el) => {
+  // ダブルクリック/ダブルタップでその章へジャンプ (シングルでは誤爆しない)。
+  // <button> 上では mobile の dblclick が発火しないため、click の2連を自前で検知する
+  // (PC は2クリック、スマホは2タップ、どちらも click が飛ぶので両対応)。
+  let lastIdx = -1, lastTime = 0;
+  items.forEach((el, idx) => {
     el.addEventListener('click', () => {
-      const sec = parseFloat(el.dataset.start);
-      if (!Number.isFinite(sec)) return;
-      audio.currentTime = sec;
-      audio.play().catch(() => {});
+      const now = Date.now();
+      if (idx === lastIdx && now - lastTime < 400) {
+        lastIdx = -1; lastTime = 0;
+        const sec = parseFloat(el.dataset.start);
+        if (!Number.isFinite(sec)) return;
+        audio.currentTime = sec;
+        audio.play().catch(() => {});
+      } else {
+        lastIdx = idx; lastTime = now;
+      }
     });
   });
 
@@ -1587,7 +1654,7 @@ async function showBlob(path) {
   if (VIDEO_EXTS.includes(ext)) {
     blobView.innerHTML = `
       <div class="section-header" style="margin-top:8px;">${esc(path)}${copyPathBtn(path)}<span id="nav-dir-toggle-slot"></span>${autoplayToggleHtml()}</div>
-      <div class="blob-container" style="padding:8px;">
+      <div class="blob-container" style="padding:8px; overflow: visible;">
         <video id="audio-player" controls preload="metadata" src="${blobUrl}"${autoplayMedia?' autoplay':''} style="width:100%; max-height:70vh; background:#000;"></video>
         <div id="playback-log-list" class="playback-log"></div>
         <div id="chapter-nav" class="chapter-nav"></div>
@@ -1605,8 +1672,8 @@ async function showBlob(path) {
     const audioAutoplay = autoplayMedia || audioContinuous;
     blobView.innerHTML = `
       <div class="section-header" style="margin-top:8px;">${esc(path)}${copyPathBtn(path)}<span id="nav-dir-toggle-slot"></span>${autoplayToggleHtml()}${continuousToggleHtml()}</div>
-      <div class="blob-container" style="padding:8px;">
-        <audio id="audio-player" controls preload="metadata" src="${blobUrl}"${audioAutoplay?' autoplay':''} style="width:100%;"></audio>
+      <div class="blob-container" style="padding:8px; overflow: visible;">
+        <div class="audio-float"><audio id="audio-player" controls preload="metadata" src="${blobUrl}"${audioAutoplay?' autoplay':''}></audio></div>
         <div id="playback-log-list" class="playback-log"></div>
         <div id="chapter-nav" class="chapter-nav"></div>
         <div id="srt-embed" class="srt-embed-container"></div>
@@ -1713,7 +1780,6 @@ async function showBlob(path) {
     const cardsHtml = cues.map((c, i) => {
       const color = speakerColor(c.speaker);
       const styleAttr = color ? ` style="--speaker-color: ${color};"` : '';
-      const speakerBadge = c.speaker ? `<span class="srt-speaker">${esc(c.speaker)}</span>` : '';
       const timeStr = (c.start && c.end) ? `${c.start} → ${c.end}` : '--';
       const idxStr = c.index || '';
       return `
@@ -1721,7 +1787,6 @@ async function showBlob(path) {
           <div class="srt-meta">
             <span class="srt-index">${esc(idxStr)}</span>
             <span class="srt-time">${esc(timeStr)}</span>
-            ${speakerBadge}
           </div>
           <div class="srt-text">${esc(c.text)}</div>
         </div>`;
