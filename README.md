@@ -8,6 +8,7 @@ Read-only web UI for browsing git repositories. Built for Raspberry Pi but works
 - **Log** -- commit history with inline diff expansion (line-by-line / side-by-side toggle)
 - **Diff** -- uncommitted changes with word-level highlighting (diff2html)
 - **Files** -- working tree browser with syntax highlighting (highlight.js), Markdown rendering (marked.js), image/PDF/audio preview, SRT subtitle rendering (speaker-colored cue cards)
+- **Listen** -- cross-project dashboard of every `output.mp3` under the repo, aggregating the per-file playback logs into listened coverage % (union of played spans) + furthest-reach %, grouped by parent folder (collapsible) and sortable, with unlistened/in-progress/done filters and last-played times; click a row to jump straight to its player
 
 ## Setup
 

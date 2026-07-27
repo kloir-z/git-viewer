@@ -680,6 +680,115 @@ def playback_log_add():
     return jsonify({"ok": True})
 
 
+def _iter_output_mp3(base_full: Path):
+    """Yield every `output.mp3` under base_full, pruning .git/hidden/archived dirs."""
+    for root, dirs, files in os.walk(base_full):
+        dirs[:] = [d for d in dirs if not d.startswith(".") and d != "archived"]
+        if "output.mp3" in files:
+            yield Path(root) / "output.mp3"
+
+
+def _srt_duration_sec(srt_path: Path):
+    """Total length (seconds) from the last cue of a sibling SRT, or None."""
+    if not srt_path.is_file():
+        return None
+    try:
+        text = srt_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    cues = notes_mod.parse_srt_cues(text)
+    if not cues:
+        return None
+    return max(c["end_ms"] for c in cues) / 1000.0
+
+
+def _coverage_from_log(log_file: Path):
+    """Aggregate a `.playback.jsonl`: (covered_sec, reach_sec, sessions, last_played).
+
+    covered_sec = length of the union of played [start,end] intervals (dedupes
+    re-listens and skips); reach_sec = furthest position reached.
+    """
+    if not log_file.is_file():
+        return 0.0, 0.0, 0, ""
+    intervals = []
+    reach = 0.0
+    last = ""
+    sessions = 0
+    for line in log_file.read_text(encoding="utf-8", errors="replace").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            rec = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        s = rec.get("start_sec")
+        e = rec.get("end_sec")
+        if not isinstance(s, (int, float)) or not isinstance(e, (int, float)):
+            continue
+        if e < s:
+            s, e = e, s
+        intervals.append((float(s), float(e)))
+        reach = max(reach, float(e))
+        sessions += 1
+        ended = rec.get("ended_at") or rec.get("started_at") or ""
+        if isinstance(ended, str) and ended > last:
+            last = ended
+    covered = 0.0
+    cur_s = cur_e = None
+    for s, e in sorted(intervals):
+        if cur_e is None:
+            cur_s, cur_e = s, e
+        elif s <= cur_e:
+            cur_e = max(cur_e, e)
+        else:
+            covered += cur_e - cur_s
+            cur_s, cur_e = s, e
+    if cur_e is not None:
+        covered += cur_e - cur_s
+    return covered, reach, sessions, last
+
+
+@app.route("/api/playback-overview")
+def playback_overview():
+    """Aggregate listening progress for every output.mp3 under a repo (optionally
+    scoped to ?path=). One row per audio: coverage/reach/last-played, so a caller
+    can render a cross-project "what have I listened to, how far" dashboard."""
+    name = request.args.get("repo", "")
+    base = request.args.get("path", "") or ""
+    repo_path = valid_repo(name)
+    if ".." in base:
+        abort(400)
+    base_full = (repo_path / base).resolve() if base else repo_path.resolve()
+    if not str(base_full).startswith(str(repo_path.resolve())):
+        abort(403)
+    items = []
+    if base_full.is_dir():
+        for mp3 in _iter_output_mp3(base_full):
+            folder = mp3.parent
+            log_file = folder / (mp3.name + ".playback.jsonl")
+            covered, reach, sessions, last = _coverage_from_log(log_file)
+            duration = _srt_duration_sec(folder / "output.srt")
+            if duration is None and reach > 0:
+                duration = reach
+            try:
+                mtime = mp3.stat().st_mtime
+            except OSError:
+                mtime = 0.0
+            items.append({
+                "dir": folder.relative_to(repo_path).as_posix(),
+                "audio": mp3.relative_to(repo_path).as_posix(),
+                "name": folder.name,
+                "duration_sec": round(duration, 1) if duration else None,
+                "covered_sec": round(covered, 1),
+                "reach_sec": round(reach, 1),
+                "sessions": sessions,
+                "last_played": last,
+                "mtime": mtime,
+            })
+    return jsonify(items)
+
+
 @app.route("/api/keep-awake", methods=["POST"])
 def keep_awake():
     if KEEP_AWAKE_SCRIPT is None:
