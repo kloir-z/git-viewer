@@ -2285,13 +2285,24 @@ async function refreshPlaybackLog(audioPath) {
   }
 }
 
+// 再生しっぱなしのまま離脱すると pause が飛ばず区間ごと消えるため、この間隔で
+// 区間を切って書き出す保険を入れる (長い音声で取りこぼしが目立っていた)。
+const PLAYBACK_CHECKPOINT_MS = 5 * 60 * 1000;
+
+// 直前のプレーヤーの後始末。showBlob は音声を切り替えるたびに <audio> ごと作り直す
+// ので、document/window に張ったリスナーと interval を解除しないと、破棄済み要素を
+// 掴んだクロージャが積み上がって二重送信や誤記録の原因になる。
+let playbackTeardown = null;
+
 function setupPlaybackLog(audioPath) {
+  if (playbackTeardown) { playbackTeardown(); playbackTeardown = null; }
   const audio = document.getElementById('audio-player');
   if (!audio) return;
 
   let segStart = null;
   let segStartedAt = null;
   let lastTime = 0;
+  let pendingRefresh = false;
 
   const start = () => {
     segStart = audio.currentTime;
@@ -2299,7 +2310,9 @@ function setupPlaybackLog(audioPath) {
     lastTime = audio.currentTime;
   };
 
-  const finalize = () => {
+  // beacon=true は離脱/バックグラウンド化の経路。fetch は破棄されうるので sendBeacon を
+  // 使う (Blob で Content-Type を付けないと Flask 側が JSON として読めない)。
+  const finalize = (beacon) => {
     if (segStart === null) return;
     const startCopy = segStart;
     const startedAtCopy = segStartedAt;
@@ -2307,28 +2320,67 @@ function setupPlaybackLog(audioPath) {
     segStartedAt = null;
     const endSec = lastTime;
     if (endSec - startCopy < PLAYBACK_MIN_SECONDS) return;
+    const body = JSON.stringify({
+      repo: currentRepo,
+      path: audioPath,
+      start_sec: startCopy,
+      end_sec: endSec,
+      started_at: startedAtCopy,
+      ended_at: new Date().toISOString(),
+    });
+    if (beacon && navigator.sendBeacon) {
+      navigator.sendBeacon('/api/playback-log', new Blob([body], {type: 'application/json'}));
+      pendingRefresh = true;
+      return;
+    }
     fetch('/api/playback-log', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
-        repo: currentRepo,
-        path: audioPath,
-        start_sec: startCopy,
-        end_sec: endSec,
-        started_at: startedAtCopy,
-        ended_at: new Date().toISOString(),
-      }),
+      body,
     }).then(() => refreshPlaybackLog(audioPath)).catch(() => {});
   };
 
-  audio.addEventListener('timeupdate', () => {
+  // ここまでを書き出し、再生中なら現在位置から次の区間を始める。
+  const checkpoint = (beacon) => {
+    const playing = !audio.paused;
+    finalize(beacon);
+    if (playing) start();
+  };
+
+  const onTimeUpdate = () => {
     if (!audio.seeking && !audio.paused) lastTime = audio.currentTime;
-  });
-  audio.addEventListener('play', start);
-  audio.addEventListener('pause', finalize);
-  audio.addEventListener('ended', finalize);
-  audio.addEventListener('seeking', finalize);
-  audio.addEventListener('seeked', () => { if (!audio.paused) start(); });
+  };
+  const onPlay = () => start();
+  const onStop = () => finalize(false);
+  const onSeeked = () => { if (!audio.paused) start(); };
+  audio.addEventListener('timeupdate', onTimeUpdate);
+  audio.addEventListener('play', onPlay);
+  audio.addEventListener('pause', onStop);
+  audio.addEventListener('ended', onStop);
+  audio.addEventListener('seeking', onStop);
+  audio.addEventListener('seeked', onSeeked);
+
+  // 画面ロック / アプリ切替 / タブを閉じる — いずれも pause を伴わずに再生区間が
+  // 消えていた経路。hidden になった時点で確定させ、復帰したら履歴表示を更新する。
+  const onVisibility = () => {
+    if (document.visibilityState === 'hidden') { checkpoint(true); return; }
+    if (pendingRefresh) { pendingRefresh = false; refreshPlaybackLog(audioPath); }
+  };
+  const onPageHide = () => finalize(true);
+  document.addEventListener('visibilitychange', onVisibility);
+  window.addEventListener('pagehide', onPageHide);
+
+  // 前景で再生しっぱなしのままタブが落ちた場合の保険。背面ではタイマーが間引かれる
+  // ので、その状態で発火したぶんは beacon で送る。
+  const timer = setInterval(() => {
+    if (!audio.paused) checkpoint(document.visibilityState === 'hidden');
+  }, PLAYBACK_CHECKPOINT_MS);
+
+  playbackTeardown = () => {
+    clearInterval(timer);
+    document.removeEventListener('visibilitychange', onVisibility);
+    window.removeEventListener('pagehide', onPageHide);
+  };
 
   refreshPlaybackLog(audioPath);
 }
