@@ -390,7 +390,7 @@ def tree():
 
 TEXT_EXTS = {
     '.py', '.js', '.ts', '.jsx', '.tsx', '.sh', '.bash', '.ps1', '.psm1', '.psd1',
-    '.json', '.yml', '.yaml', '.xml', '.html', '.css', '.toml', '.md', '.txt',
+    '.json', '.yml', '.yaml', '.xml', '.html', '.htm', '.css', '.toml', '.md', '.txt',
     '.cfg', '.ini', '.conf', '.env', '.service', '.timer', '.csv', '.sql',
     '.rb', '.go', '.rs', '.java', '.c', '.h', '.cpp', '.hpp', '.vue', '.svelte',
     '.gitignore', '.dockerignore', '.dockerfile', '.makefile', '.srt', '',
@@ -444,6 +444,44 @@ def blob():
     # Binary files (images, PDFs, audio, office docs, archives, etc.): return raw bytes
     mime = mimetypes.guess_type(path)[0] or 'application/octet-stream'
     return send_file(file_full, mimetype=mime, download_name=path.rsplit('/', 1)[-1])
+
+
+def _in_repo(file_full: Path, code_root: Path) -> bool:
+    """True if an ancestor of file_full (up to code_root) is a git work tree."""
+    parent = file_full.parent
+    while True:
+        if (parent / ".git").is_dir():
+            return True
+        if parent == code_root or parent.parent == parent:
+            return False
+        parent = parent.parent
+
+
+@app.route("/raw/<path:relpath>")
+def raw(relpath):
+    """Serve a repo file inline with its real content type.
+
+    Unlike /api/blob (which wraps text in JSON), this streams the raw bytes so
+    the browser renders HTML as a page. The URL mirrors the on-disk layout
+    (CODE_DIR/<relpath>), so a page's relative CSS/JS/image references resolve
+    against sibling /raw/ URLs. Read-only preview of local repos.
+    """
+    norm = relpath.replace("\\", "/")
+    if ".." in norm.split("/"):
+        abort(400)
+    code_root = CODE_DIR.resolve()
+    file_full = (CODE_DIR / norm).resolve()
+    if not (file_full == code_root or str(file_full).startswith(str(code_root) + os.sep)):
+        abort(403)
+    if not file_full.is_file():
+        abort(404)
+    if any(part == ".git" for part in file_full.relative_to(code_root).parts):
+        abort(404)
+    if not _in_repo(file_full, code_root):
+        abort(404)
+
+    mime = mimetypes.guess_type(str(file_full))[0] or "application/octet-stream"
+    return send_file(file_full, mimetype=mime)
 
 
 @app.route("/api/blob", methods=["PUT"])

@@ -761,7 +761,7 @@ const AUDIO_EXTS = ['mp3','wav','ogg','m4a','flac','aac','opus'];
 const VIDEO_EXTS = ['mp4','webm','m4v','mov','ogv'];
 const TEXT_EXTS = [
   'py','js','ts','jsx','tsx','sh','bash','ps1','psm1','psd1','json','yml','yaml',
-  'xml','html','css','toml','md','txt','cfg','ini','conf','env','service','timer',
+  'xml','html','htm','css','toml','md','txt','cfg','ini','conf','env','service','timer',
   'csv','sql','rb','go','rs','java','c','h','cpp','hpp','vue','svelte','gitignore',
   'dockerignore','makefile','lock','log','srt',
 ];
@@ -1481,6 +1481,33 @@ function isEditableExt(ext) {
   return TEXT_EXTS.includes(ext);
 }
 
+function isHtmlExt(ext) {
+  return ext === 'html' || ext === 'htm';
+}
+
+// Build a /raw/ URL that mirrors the repo's on-disk layout so the rendered
+// page's relative CSS/JS/image references resolve against sibling /raw/ URLs.
+function rawUrl(path) {
+  const segs = (currentRepo + '/' + path).split('/').filter(Boolean).map(encodeURIComponent);
+  return '/raw/' + segs.join('/');
+}
+
+// Per-session toggle: HTML files render in an iframe by default; this flips to
+// source view. Persists across files (a viewing preference, like autoplay).
+let htmlSourceMode = false;
+function toggleHtmlSource() {
+  htmlSourceMode = !htmlSourceMode;
+  if (currentBlobPath) showBlob(currentBlobPath);
+}
+
+// Extra header controls shown when an HTML file is displayed as source.
+function htmlSourceHeaderExtras(path, ext) {
+  if (!isHtmlExt(ext)) return '';
+  const rUrl = rawUrl(path);
+  return `<a href="${rUrl}" target="_blank" rel="noopener" style="margin-left:8px;color:var(--accent);font-size:11px;">新しいタブで開く</a>` +
+    `<button onclick="toggleHtmlSource()" style="margin-left:8px;font-size:11px;padding:1px 6px;">レンダリング表示</button>`;
+}
+
 async function loadSiblings(path) {
   const dir = getBlobDir(path);
   const ext = getExt(path);
@@ -1697,6 +1724,21 @@ async function showBlob(path) {
     return;
   }
 
+  // HTML — render as a webpage in an iframe. The /raw/ URL mirrors the repo's
+  // directory layout, so relative CSS/JS/images resolve. "新しいタブで開く"
+  // gives a clean full-screen view (handy on mobile). Toggle to view source.
+  if (isHtmlExt(ext) && !htmlSourceMode) {
+    const rUrl = rawUrl(path);
+    blobView.innerHTML = `
+      <div class="section-header" style="margin-top:8px;">${esc(path)}${copyPathBtn(path)}<span id="nav-dir-toggle-slot"></span>
+        <a href="${rUrl}" target="_blank" rel="noopener" style="margin-left:8px;color:var(--accent);font-size:11px;">新しいタブで開く</a>
+        <button onclick="toggleHtmlSource()" style="margin-left:8px;font-size:11px;padding:1px 6px;">ソースを表示</button>
+      </div>
+      <iframe src="${rUrl}" style="width:100%;height:80vh;border:1px solid #21262d;border-radius:4px;background:#fff;"></iframe>`;
+    renderNavDirToggle();
+    return;
+  }
+
   // Text / Code / Markdown
   const data = await fetchJson(blobUrl);
   if (data.content === undefined) {
@@ -1819,7 +1861,7 @@ async function showBlob(path) {
       `<div class="code-line" data-bm-line="${i+1}">${line || ' '}</div>`
     ).join('');
     blobView.innerHTML = `
-      <div class="section-header" style="margin-top:8px;">${esc(path)}${copyPathBtn(path)}<span id="nav-dir-toggle-slot"></span><span id="bm-jump-btn"></span></div>
+      <div class="section-header" style="margin-top:8px;">${esc(path)}${copyPathBtn(path)}<span id="nav-dir-toggle-slot"></span><span id="bm-jump-btn"></span>${htmlSourceHeaderExtras(path, ext)}</div>
       <div class="blob-container">
         <div class="code-wrapper hljs language-${lang}">${rowsHtml}</div>
       </div>`;
